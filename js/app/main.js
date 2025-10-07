@@ -26,7 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const p5Instance = new p5(sketch);
 
   // Inicializamos todos los módulos de la aplicación.
-  // El orden puede ser importante si unos dependen de otros.
+  // El orden es importante:
+  // 1. UI primero para que los elementos del DOM estén listos.
+  // 2. File Handler después, ya que interactúa con la UI y necesita p5.
+  // 3. El resto de módulos que dependen de eventos o del estado.
   initializeUI();
   initializeCurvesEditor();
   initializeFileHandler(p5Instance); // El file handler necesita p5 para crear videos/imágenes.
