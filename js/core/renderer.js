@@ -110,7 +110,8 @@ export function sketch(p) {
             drawVariableError(p, buffer, media, config, lumaLUT);
             break;
         default:
-          drawDither(p, buffer, media, config, colorCache, bayerLUT);
+          // LLAMADA CORREGIDA FINAL: Volvemos a pasar lumaLUT, que es lo que la función espera.
+          drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
       p.image(buffer, 0, 0, p.width, p.height);
 
