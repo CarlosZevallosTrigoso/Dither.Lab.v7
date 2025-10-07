@@ -144,17 +144,28 @@ async function handleFile(file, p) {
 
         const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(mediaElement.width, mediaElement.height);
         
-        updateState({ media: mediaElement, mediaType, mediaInfo: {
-            width: mediaElement.width,
-            height: mediaElement.height,
-            duration: isVideo ? mediaElement.duration() : 0,
-            fileName: file.name
-        }});
+        updateState({ 
+            media: mediaElement, 
+            mediaType, 
+            mediaInfo: {
+                width: mediaElement.width,
+                height: mediaElement.height,
+                duration: isVideo ? mediaElement.duration() : 0,
+                fileName: file.name
+            }
+        });
 
         const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         updateConfig({ colors: newPalette });
 
-        events.emit('media:loaded', { canvasWidth, canvasHeight });
+        // ✅ CORRECCIÓN CRÍTICA: Enviar todos los datos necesarios
+        events.emit('media:loaded', { 
+            canvasWidth, 
+            canvasHeight,
+            media: mediaElement,
+            mediaType
+        });
+        
         showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado.`);
 
     } catch (error) {
