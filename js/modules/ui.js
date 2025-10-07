@@ -10,11 +10,15 @@
 import { events } from '../app/events.js';
 import { getState, updateConfig } from '../app/state.js';
 import { ALGORITHM_INFO, ALGORITHM_NAMES, KERNELS } from '../core/constants.js';
-import { throttle, debounce } from '../utils/helpers.js';
+import { throttle, debounce, showToast } from '../utils/helpers.js';
 
 // Un objeto para mantener referencias a todos los elementos del DOM.
 const elements = {};
 let lastColorCount = 0; // Cache para evitar recrear el DOM innecesariamente
+
+// Variables para FPS counter
+let lastFrameTime = Date.now();
+let frameCount = 0;
 
 /**
  * Selecciona todos los elementos necesarios del DOM y los guarda en el objeto 'elements'.
@@ -34,118 +38,234 @@ function queryElements() {
         'resetImageAdjustmentsBtn', 'brightnessSlider', 'brightnessVal',
         'contrastSlider', 'contrastVal', 'saturationSlider', 'saturationVal',
         'toggleCurvesBtn', 'basicImageControls', 'curvesEditor',
-        'metricsBtn', 'metricsModal', 'closeMetricsBtn'
+        'metricsBtn', 'metricsModal', 'closeMetricsBtn', 'updateMetricsBtn',
+        'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
+        'spriteCols', 'spriteFrameCount'
     ];
-    ids.forEach(id => (elements[id] = document.getElementById(id)));
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            elements[id] = el;
+        }
+    });
 }
 
 /**
  * Vincula los listeners a los eventos de los elementos de la UI.
  */
 function bindEventListeners() {
-    // Panel de Algoritmo
-    elements.effectSelect.addEventListener('change', (e) => {
-        updateConfig({ effect: e.target.value });
-    });
-
-    // Panel de Ajustes de Imagen
-    elements.brightnessSlider.addEventListener('input', throttle((e) => {
-        updateConfig({ brightness: parseInt(e.target.value) });
-    }, 16));
-
-    elements.contrastSlider.addEventListener('input', throttle((e) => {
-        updateConfig({ contrast: parseInt(e.target.value) / 100 });
-    }, 16));
-
-    elements.saturationSlider.addEventListener('input', throttle((e) => {
-        updateConfig({ saturation: parseInt(e.target.value) / 100 });
-    }, 16));
-
-    // ✅ AÑADIDO: Listener para resetear ajustes de imagen
-    elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
-        updateConfig({
-            brightness: 0,
-            contrast: 1.0,
-            saturation: 1.0
+    // ========== Panel de Algoritmo ==========
+    if (elements.effectSelect) {
+        elements.effectSelect.addEventListener('change', (e) => {
+            updateConfig({ effect: e.target.value });
         });
-        // También resetear curvas
-        events.emit('curves:reset-all');
-    });
+    }
 
-    elements.toggleCurvesBtn.addEventListener('click', () => {
-        elements.basicImageControls.classList.toggle('hidden');
-        elements.curvesEditor.classList.toggle('hidden');
-        events.emit('ui:curves-editor-toggled');
-    });
+    // ========== Panel de Ajustes de Imagen ==========
+    if (elements.brightnessSlider) {
+        elements.brightnessSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ brightness: parseInt(e.target.value) });
+        }, 16));
+    }
 
-    // Panel de Paleta de Colores
-    elements.colorCountSlider.addEventListener('input', debounce((e) => {
-        const newCount = parseInt(e.target.value);
-        updateConfig({ colorCount: newCount });
-        
-        // ✅ MEJORADO: Regenerar paleta automáticamente al cambiar cantidad
-        const { config } = getState();
-        if (config.isMonochrome) {
-            generateMonochromePalette(newCount);
-        }
-    }, 150));
-    
-    // ✅ MEJORADO: Generar paleta en escala de grises al activar monocromático
-    elements.monochromeToggle.addEventListener('change', (e) => {
-        const isMonochrome = e.target.checked;
-        updateConfig({ isMonochrome });
-        
-        if (isMonochrome) {
+    if (elements.contrastSlider) {
+        elements.contrastSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ contrast: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
+
+    if (elements.saturationSlider) {
+        elements.saturationSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ saturation: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
+
+    // ✅ Botón resetear ajustes de imagen
+    if (elements.resetImageAdjustmentsBtn) {
+        elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
+            updateConfig({
+                brightness: 0,
+                contrast: 1.0,
+                saturation: 1.0
+            });
+            // También resetear curvas
+            events.emit('curves:reset-all');
+            showToast('Ajustes de imagen reseteados');
+        });
+    }
+
+    if (elements.toggleCurvesBtn) {
+        elements.toggleCurvesBtn.addEventListener('click', () => {
+            if (elements.basicImageControls) {
+                elements.basicImageControls.classList.toggle('hidden');
+            }
+            if (elements.curvesEditor) {
+                elements.curvesEditor.classList.toggle('hidden');
+            }
+            events.emit('ui:curves-editor-toggled');
+        });
+    }
+
+    // ========== Panel de Paleta de Colores ==========
+    if (elements.colorCountSlider) {
+        elements.colorCountSlider.addEventListener('input', debounce((e) => {
+            const newCount = parseInt(e.target.value);
+            updateConfig({ colorCount: newCount });
+            
+            // ✅ Regenerar paleta automáticamente si está en monocromático
             const { config } = getState();
-            generateMonochromePalette(config.colorCount);
-        }
-    });
+            if (config.isMonochrome) {
+                generateMonochromePalette(newCount);
+            }
+        }, 150));
+    }
     
-    elements.originalColorToggle.addEventListener('change', (e) => {
-        updateConfig({ useOriginalColor: e.target.checked });
-    });
+    // ✅ Toggle monocromático con generación automática de paleta
+    if (elements.monochromeToggle) {
+        elements.monochromeToggle.addEventListener('change', (e) => {
+            const isMonochrome = e.target.checked;
+            updateConfig({ isMonochrome });
+            
+            if (isMonochrome) {
+                const { config } = getState();
+                generateMonochromePalette(config.colorCount);
+            }
+        });
+    }
+    
+    if (elements.originalColorToggle) {
+        elements.originalColorToggle.addEventListener('change', (e) => {
+            updateConfig({ useOriginalColor: e.target.checked });
+        });
+    }
 
-    // Panel de Controles Avanzados
-    elements.ditherScale.addEventListener('input', throttle((e) => {
-        updateConfig({ ditherScale: parseInt(e.target.value) });
-    }, 16));
+    // ========== Panel de Controles Avanzados ==========
+    if (elements.ditherScale) {
+        elements.ditherScale.addEventListener('input', throttle((e) => {
+            updateConfig({ ditherScale: parseInt(e.target.value) });
+        }, 16));
+    }
     
-    elements.serpentineToggle.addEventListener('change', (e) => {
-        updateConfig({ serpentineScan: e.target.checked });
-    });
+    if (elements.serpentineToggle) {
+        elements.serpentineToggle.addEventListener('change', (e) => {
+            updateConfig({ serpentineScan: e.target.checked });
+        });
+    }
     
-    elements.diffusionStrengthSlider.addEventListener('input', throttle((e) => {
-        updateConfig({ diffusionStrength: parseInt(e.target.value) / 100 });
-    }, 16));
+    if (elements.diffusionStrengthSlider) {
+        elements.diffusionStrengthSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ diffusionStrength: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
     
-    elements.patternStrengthSlider.addEventListener('input', throttle((e) => {
-        updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
-    }, 16));
+    if (elements.patternStrengthSlider) {
+        elements.patternStrengthSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
 
-    // Modals
-    elements.shortcutsBtn.addEventListener('click', () => elements.shortcutsModal.style.display = 'flex');
-    elements.closeShortcutsBtn.addEventListener('click', () => elements.shortcutsModal.style.display = 'none');
-    elements.metricsBtn.addEventListener('click', () => elements.metricsModal.style.display = 'flex');
-    elements.closeMetricsBtn.addEventListener('click', () => elements.metricsModal.style.display = 'none');
+    // ========== Sliders de Exportación GIF ==========
+    if (elements.gifFpsSlider) {
+        elements.gifFpsSlider.addEventListener('input', (e) => {
+            if (elements.gifFpsVal) {
+                elements.gifFpsVal.textContent = e.target.value;
+            }
+        });
+    }
+
+    if (elements.gifQualitySlider) {
+        elements.gifQualitySlider.addEventListener('input', (e) => {
+            if (elements.gifQualityVal) {
+                elements.gifQualityVal.textContent = e.target.value;
+            }
+        });
+    }
+
+    // ========== Sliders de Sprite Sheet ==========
+    if (elements.spriteColsSlider) {
+        elements.spriteColsSlider.addEventListener('input', (e) => {
+            if (elements.spriteCols) {
+                elements.spriteCols.textContent = e.target.value;
+            }
+        });
+    }
+
+    if (elements.spriteFrameCountSlider) {
+        elements.spriteFrameCountSlider.addEventListener('input', (e) => {
+            if (elements.spriteFrameCount) {
+                elements.spriteFrameCount.textContent = e.target.value;
+            }
+        });
+    }
+
+    // ========== Modals ==========
+    if (elements.shortcutsBtn) {
+        elements.shortcutsBtn.addEventListener('click', () => {
+            if (elements.shortcutsModal) {
+                elements.shortcutsModal.style.display = 'flex';
+            }
+        });
+    }
+
+    if (elements.closeShortcutsBtn) {
+        elements.closeShortcutsBtn.addEventListener('click', () => {
+            if (elements.shortcutsModal) {
+                elements.shortcutsModal.style.display = 'none';
+            }
+        });
+    }
+
+    if (elements.metricsBtn) {
+        elements.metricsBtn.addEventListener('click', () => {
+            if (elements.metricsModal) {
+                elements.metricsModal.style.display = 'flex';
+            }
+        });
+    }
+
+    if (elements.closeMetricsBtn) {
+        elements.closeMetricsBtn.addEventListener('click', () => {
+            if (elements.metricsModal) {
+                elements.metricsModal.style.display = 'none';
+            }
+        });
+    }
+
+    // ✅ Botón actualizar métricas
+    if (elements.updateMetricsBtn) {
+        elements.updateMetricsBtn.addEventListener('click', () => {
+            const state = getState();
+            if (!state.media) {
+                showToast('Carga una imagen o video primero.');
+                return;
+            }
+            showToast('Función de métricas avanzadas en desarrollo.');
+            // Aquí iría la lógica de cálculo de métricas usando metrics.js
+        });
+    }
     
-    // ✅ AÑADIDO: Cerrar modales con evento
+    // ✅ Cerrar modales con eventos
     events.on('ui:close-modals', () => {
-        elements.shortcutsModal.style.display = 'none';
-        elements.metricsModal.style.display = 'none';
+        if (elements.shortcutsModal) elements.shortcutsModal.style.display = 'none';
+        if (elements.metricsModal) elements.metricsModal.style.display = 'none';
     });
     
-    // ✅ AÑADIDO: Abrir/cerrar modales con eventos de teclado
+    // ✅ Toggle modales con eventos de teclado
     events.on('ui:toggle-shortcuts-modal', () => {
-        const isVisible = elements.shortcutsModal.style.display === 'flex';
-        elements.shortcutsModal.style.display = isVisible ? 'none' : 'flex';
+        if (elements.shortcutsModal) {
+            const isVisible = elements.shortcutsModal.style.display === 'flex';
+            elements.shortcutsModal.style.display = isVisible ? 'none' : 'flex';
+        }
     });
     
     events.on('ui:toggle-metrics-modal', () => {
-        const isVisible = elements.metricsModal.style.display === 'flex';
-        elements.metricsModal.style.display = isVisible ? 'none' : 'flex';
+        if (elements.metricsModal) {
+            const isVisible = elements.metricsModal.style.display === 'flex';
+            elements.metricsModal.style.display = isVisible ? 'none' : 'flex';
+        }
     });
     
-    // ✅ AÑADIDO: Pantalla completa
+    // ✅ Pantalla completa
     events.on('ui:toggle-fullscreen', () => {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(err => {
@@ -155,15 +275,35 @@ function bindEventListeners() {
             document.exitFullscreen();
         }
     });
+
+    // ========== FPS Counter ==========
+    events.on('render:frame-drawn', () => {
+        frameCount++;
+        const now = Date.now();
+        const delta = now - lastFrameTime;
+        
+        if (delta >= 1000) { // Actualizar cada segundo
+            const fps = Math.round((frameCount * 1000) / delta);
+            const avgFrameTime = Math.round(delta / frameCount);
+            
+            if (elements.fps) elements.fps.textContent = fps;
+            if (elements.frameTime) elements.frameTime.textContent = avgFrameTime;
+            
+            frameCount = 0;
+            lastFrameTime = now;
+        }
+    });
+
+    console.log('Event listeners vinculados correctamente.');
 }
 
 /**
- * ✅ AÑADIDO: Genera una paleta en escala de grises
+ * ✅ Genera una paleta en escala de grises
  */
 function generateMonochromePalette(colorCount) {
     const grayPalette = [];
     for (let i = 0; i < colorCount; i++) {
-        const value = Math.floor((i / (colorCount - 1)) * 255);
+        const value = Math.floor((i / Math.max(1, colorCount - 1)) * 255);
         const hex = '#' + value.toString(16).padStart(2, '0').repeat(3);
         grayPalette.push(hex);
     }
@@ -172,20 +312,28 @@ function generateMonochromePalette(colorCount) {
 
 /**
  * Crea o actualiza los selectores de color en el DOM.
- * Esta función es crucial y fue portada de la v6.
  */
 function updateColorInputs() {
     const { config } = getState();
     const { colors, colorCount, useOriginalColor, isMonochrome } = config;
 
-    elements.monochromeToggle.disabled = useOriginalColor;
-    elements.colorCountSlider.disabled = useOriginalColor;
+    if (!elements.colorPickerContainer) return;
+
+    // Deshabilitar controles si se usa color original
+    if (elements.monochromeToggle) {
+        elements.monochromeToggle.disabled = useOriginalColor;
+    }
+    if (elements.colorCountSlider) {
+        elements.colorCountSlider.disabled = useOriginalColor;
+    }
 
     const container = elements.colorPickerContainer;
     const currentInputs = container.querySelectorAll('input[type="color"]');
 
+    // ✅ Recrear inputs solo si cambió la cantidad
     if (colorCount !== lastColorCount) {
-        container.innerHTML = ""; // Limpiar y recrear
+        container.innerHTML = ""; // Limpiar
+        
         for (let i = 0; i < colorCount; i++) {
             const hexColor = colors[i] || '#000000';
             const label = document.createElement("label");
@@ -205,7 +353,7 @@ function updateColorInputs() {
         }
         lastColorCount = colorCount;
     } else {
-        // Solo actualizar valores si no se recrea
+        // Solo actualizar valores existentes
         currentInputs.forEach((input, i) => {
             if (colors[i] && input.value !== colors[i]) {
                 input.value = colors[i];
@@ -219,67 +367,79 @@ function updateColorInputs() {
     });
 }
 
-
 /**
  * Actualiza los elementos visuales de la UI en base al estado de la aplicación.
  * @param {object} state - El estado actual de la aplicación.
  */
 function updateUI(state) {
-    if (!state) return;
+    if (!state || !state.config) return;
     const { config, mediaType, mediaInfo } = state;
 
-    // Sincronizar sliders y valores de texto
-    elements.brightnessVal.textContent = config.brightness;
-    elements.contrastVal.textContent = Math.round(config.contrast * 100);
-    elements.saturationVal.textContent = Math.round(config.saturation * 100);
-    elements.colorCountVal.textContent = config.colorCount;
-    elements.ditherScaleVal.textContent = config.ditherScale;
-    elements.diffusionStrengthVal.textContent = Math.round(config.diffusionStrength * 100);
-    elements.patternStrengthVal.textContent = Math.round(config.patternStrength * 100);
+    // ========== Sincronizar valores de sliders ==========
+    if (elements.brightnessVal) elements.brightnessVal.textContent = config.brightness;
+    if (elements.contrastVal) elements.contrastVal.textContent = Math.round(config.contrast * 100);
+    if (elements.saturationVal) elements.saturationVal.textContent = Math.round(config.saturation * 100);
+    if (elements.colorCountVal) elements.colorCountVal.textContent = config.colorCount;
+    if (elements.ditherScaleVal) elements.ditherScaleVal.textContent = config.ditherScale;
+    if (elements.diffusionStrengthVal) elements.diffusionStrengthVal.textContent = Math.round(config.diffusionStrength * 100);
+    if (elements.patternStrengthVal) elements.patternStrengthVal.textContent = Math.round(config.patternStrength * 100);
 
-    elements.brightnessSlider.value = config.brightness;
-    elements.contrastSlider.value = config.contrast * 100;
-    elements.saturationSlider.value = config.saturation * 100;
-    elements.colorCountSlider.value = config.colorCount;
-    elements.ditherScale.value = config.ditherScale;
-    elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
-    elements.patternStrengthSlider.value = config.patternStrength * 100;
+    if (elements.brightnessSlider) elements.brightnessSlider.value = config.brightness;
+    if (elements.contrastSlider) elements.contrastSlider.value = config.contrast * 100;
+    if (elements.saturationSlider) elements.saturationSlider.value = config.saturation * 100;
+    if (elements.colorCountSlider) elements.colorCountSlider.value = config.colorCount;
+    if (elements.ditherScale) elements.ditherScale.value = config.ditherScale;
+    if (elements.diffusionStrengthSlider) elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
+    if (elements.patternStrengthSlider) elements.patternStrengthSlider.value = config.patternStrength * 100;
 
-    // Sincronizar checkboxes y selects
-    elements.effectSelect.value = config.effect;
-    elements.serpentineToggle.checked = config.serpentineScan;
-    elements.monochromeToggle.checked = config.isMonochrome;
-    elements.originalColorToggle.checked = config.useOriginalColor;
+    // ========== Sincronizar checkboxes y selects ==========
+    if (elements.effectSelect) elements.effectSelect.value = config.effect;
+    if (elements.serpentineToggle) elements.serpentineToggle.checked = config.serpentineScan;
+    if (elements.monochromeToggle) elements.monochromeToggle.checked = config.isMonochrome;
+    if (elements.originalColorToggle) elements.originalColorToggle.checked = config.useOriginalColor;
 
-    // Actualizar la paleta de colores en la UI
+    // ========== Actualizar paleta de colores ==========
     updateColorInputs();
 
-    // Actualizar panel de información del algoritmo
-    elements.infoText.textContent = ALGORITHM_INFO[config.effect] || 'Selecciona un algoritmo.';
-    elements.effectName.textContent = ALGORITHM_NAMES[config.effect] || 'Desconocido';
+    // ========== Panel de información del algoritmo ==========
+    if (elements.infoText) {
+        elements.infoText.textContent = ALGORITHM_INFO[config.effect] || 'Selecciona un algoritmo.';
+    }
+    if (elements.effectName) {
+        elements.effectName.textContent = ALGORITHM_NAMES[config.effect] || 'Desconocido';
+    }
 
-    // Visibilidad de paneles de control de dithering
+    // ========== Visibilidad de paneles de dithering ==========
     const isDithering = config.effect !== "none" && config.effect !== "posterize";
-    elements.ditherControls.classList.toggle("hidden", !isDithering);
+    if (elements.ditherControls) {
+        elements.ditherControls.classList.toggle("hidden", !isDithering);
+    }
 
     if (isDithering) {
         const isErrorDiffusion = KERNELS[config.effect] || config.effect === 'variable-error';
         const isOrdered = config.effect === "bayer" || config.effect === "blue-noise";
-        elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
-        elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
+        
+        if (elements.errorDiffusionControls) {
+            elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
+        }
+        if (elements.orderedDitherControls) {
+            elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
+        }
     }
 
-    // Actualizar info del medio cargado
+    // ========== Info del medio cargado ==========
     if (mediaType) {
-        elements.mediaType.textContent = mediaType.toUpperCase();
-        elements.mediaDimensions.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
-        elements.playBtn.disabled = mediaType === 'image';
-        elements.restartBtn.disabled = mediaType === 'image';
+        if (elements.mediaType) elements.mediaType.textContent = mediaType.toUpperCase();
+        if (elements.mediaDimensions && mediaInfo) {
+            elements.mediaDimensions.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
+        }
+        if (elements.playBtn) elements.playBtn.disabled = mediaType === 'image';
+        if (elements.restartBtn) elements.restartBtn.disabled = mediaType === 'image';
     } else {
-        elements.mediaType.textContent = 'No cargado';
-        elements.mediaDimensions.textContent = '';
-        elements.playBtn.disabled = true;
-        elements.restartBtn.disabled = true;
+        if (elements.mediaType) elements.mediaType.textContent = 'No cargado';
+        if (elements.mediaDimensions) elements.mediaDimensions.textContent = '';
+        if (elements.playBtn) elements.playBtn.disabled = true;
+        if (elements.restartBtn) elements.restartBtn.disabled = true;
     }
 }
 
@@ -290,7 +450,7 @@ export function initializeUI() {
     queryElements();
     bindEventListeners();
 
-    // Suscribirse a los eventos de cambio de estado para mantener la UI sincronizada.
+    // Suscribirse a eventos de cambio de estado
     events.on('state:updated', updateUI);
     events.on('config:updated', (state) => updateUI(state)); 
 
