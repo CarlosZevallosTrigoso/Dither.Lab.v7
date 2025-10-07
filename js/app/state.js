@@ -32,6 +32,13 @@ const state = {
     saturation: 1.0,
     curvesLUTs: null
   },
+  // ✅ AÑADIDO: Estado de curvas para el editor
+  curves: {
+    rgb: [{x: 0, y: 0}, {x: 255, y: 255}],
+    r: [{x: 0, y: 0}, {x: 255, y: 255}],
+    g: [{x: 0, y: 0}, {x: 255, y: 255}],
+    b: [{x: 0, y: 0}, {x: 255, y: 255}]
+  },
   timeline: {
     markerInTime: null,
     markerOutTime: null,
@@ -68,6 +75,15 @@ export function updateTimeline(newTimelineState) {
     Object.assign(state.timeline, newTimelineState);
     // Se emite una copia superficial.
     events.emit('timeline:updated', { ...state });
+}
+
+/**
+ * ✅ AÑADIDO: Actualiza las curvas del editor
+ * @param {object} newCurves - Un objeto con las curvas a actualizar
+ */
+export function updateCurves(newCurves) {
+    Object.assign(state.curves, newCurves);
+    events.emit('curves:updated', { ...state });
 }
 
 /**
