@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DitherLab v7</title>
+  <meta name="description" content="Procesador avanzado de dithering con una arquitectura modular y optimizada."/>
+  <meta name="theme-color" content="#06b6d4"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="css/styles.css"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-gray-200">
+
+  <div class="flex flex-col lg:flex-row h-screen max-h-screen">
+
+    <aside class="w-full lg:w-96 flex-shrink-0 bg-slate-900 p-6 overflow-y-auto sidebar-scroll">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h1 class="text-3xl font-bold text-cyan-400 cursor-pointer hover:text-cyan-300 transition-colors" onclick="location.reload()" title="Recargar página">DitherLab</h1>
+            <span class="text-xs text-gray-500">v7.0 Modular</span>
+          </div>
+          <button id="shortcutsBtn" class="text-xs bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 border border-slate-700">
+            Atajos (?)
+          </button>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-cyan-300 mb-3">MEDIO</h2>
+          <label id="dropZone" class="block w-full text-center py-4 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-cyan-400 hover:bg-slate-700 transition-colors">
+            <span class="text-gray-400">Arrastra video o imagen aquí</span>
+            <input id="fileInput" type="file" accept="video/*,image/*" class="hidden"/>
+          </label>
+          <div class="flex gap-2 mt-3">
+            <button id="playBtn" class="flex-1 py-2 bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Play</button>
+            <button id="restartBtn" class="px-3 py-2 bg-slate-700 rounded hover:bg-slate-600 disabled:opacity-50" disabled>↺</button>
+          </div>
+          <div id="mediaInfo" class="text-xs text-gray-400 mt-2 flex items-center gap-2">
+            <span id="mediaType" class="bg-slate-700 px-2 py-1 rounded">No cargado</span>
+            <span id="mediaDimensions"></span>
+          </div>
+        </div>
+
+        <div id="timelinePanel" class="bg-slate-800 rounded-lg p-4 hidden">
+          </div>
+
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-purple-300 mb-3">ALGORITMO DE DITHERING</h2>
+          <select id="effectSelect" class="w-full bg-slate-700 p-2 rounded text-white">
+            </select>
+          <p id="infoText" class="text-xs text-gray-300 leading-relaxed mt-2">Selecciona un algoritmo para ver su descripción.</p>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-yellow-300">AJUSTES DE IMAGEN</h3>
+            <div>
+              <button id="toggleCurvesBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">📈 Curvas</button>
+              <button id="resetImageAdjustmentsBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Reset</button>
+            </div>
+          </div>
+          <div id="basicImageControls" class="space-y-3">
+            </div>
+          <div id="curvesEditor" class="hidden space-y-3">
+            <canvas id="curvesCanvas" width="280" height="280" style="..."></canvas>
+            </div>
+        </div>
+        
+        </div>
+    </aside>
+
+    <main id="canvasContainer" class="flex-1 min-w-0 min-h-0 bg-black flex items-center justify-center p-4">
+      </main>
+  </div>
+
+  <div id="shortcutsModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50">...</div>
+  <div id="metricsModal" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-50">...</div>
+
+  <script type="module" src="js/app/main.js"></script>
+  <script type="module" src="js/app/pwa.js"></script>
+  <script type="module" src="js/app/main.js"></script>
+</body>
+</html>
+</body>
+</html>
