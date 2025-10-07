@@ -8,13 +8,13 @@
  * ============================================================================
  */
 import { events } from '../app/events.js';
-import { updateConfig } from '../app/state.js';
-// LÍNEA CORREGIDA: Se añade la importación de 'KERNELS'.
-import { ALGORITHM_INFO, ALGORITHM_NAMES, KERNELS } from '../core/constants.js'; 
+import { getState, updateConfig } from '../app/state.js';
+import { ALGORITHM_INFO, ALGORITHM_NAMES, KERNELS } from '../core/constants.js';
 import { throttle, debounce } from '../utils/helpers.js';
 
 // Un objeto para mantener referencias a todos los elementos del DOM.
 const elements = {};
+let lastColorCount = 0; // Cache para evitar recrear el DOM innecesariamente
 
 /**
  * Selecciona todos los elementos necesarios del DOM y los guarda en el objeto 'elements'.
@@ -56,7 +56,7 @@ function bindEventListeners() {
     elements.contrastSlider.addEventListener('input', throttle((e) => {
         updateConfig({ contrast: parseInt(e.target.value) / 100 });
     }, 16));
-    
+
     elements.saturationSlider.addEventListener('input', throttle((e) => {
         updateConfig({ saturation: parseInt(e.target.value) / 100 });
     }, 16));
@@ -71,12 +71,39 @@ function bindEventListeners() {
         events.emit('ui:curves-editor-toggled');
     });
 
+    // --- LÓGICA CORREGIDA Y AÑADIDA ---
+
     // Panel de Paleta de Colores
     elements.colorCountSlider.addEventListener('input', debounce((e) => {
         updateConfig({ colorCount: parseInt(e.target.value) });
     }, 150));
     
-    // ... (Se añadirán más listeners para otros paneles aquí)
+    elements.monochromeToggle.addEventListener('change', (e) => {
+        updateConfig({ isMonochrome: e.target.checked });
+    });
+    
+    elements.originalColorToggle.addEventListener('change', (e) => {
+        updateConfig({ useOriginalColor: e.target.checked });
+    });
+
+    // Panel de Controles Avanzados
+    elements.ditherScale.addEventListener('input', throttle((e) => {
+        updateConfig({ ditherScale: parseInt(e.target.value) });
+    }, 16));
+    
+    elements.serpentineToggle.addEventListener('change', (e) => {
+        updateConfig({ serpentineScan: e.target.checked });
+    });
+    
+    elements.diffusionStrengthSlider.addEventListener('input', throttle((e) => {
+        updateConfig({ diffusionStrength: parseInt(e.target.value) / 100 });
+    }, 16));
+    
+    elements.patternStrengthSlider.addEventListener('input', throttle((e) => {
+        updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
+    }, 16));
+
+    // --- FIN DE LÓGICA CORREGIDA ---
 
     // Modals
     elements.shortcutsBtn.addEventListener('click', () => elements.shortcutsModal.style.display = 'flex');
@@ -86,27 +113,88 @@ function bindEventListeners() {
 }
 
 /**
+ * Crea o actualiza los selectores de color en el DOM.
+ * Esta función es crucial y fue portada de la v6.
+ */
+function updateColorInputs() {
+    const { config } = getState();
+    const { colors, colorCount, useOriginalColor, isMonochrome } = config;
+
+    elements.monochromeToggle.disabled = useOriginalColor;
+    elements.colorCountSlider.disabled = useOriginalColor;
+
+    const container = elements.colorPickerContainer;
+    const currentInputs = container.querySelectorAll('input[type="color"]');
+
+    if (colorCount !== lastColorCount) {
+        container.innerHTML = ""; // Limpiar y recrear
+        for (let i = 0; i < colorCount; i++) {
+            const hexColor = colors[i] || '#000000';
+            const label = document.createElement("label");
+            label.className = "block";
+            label.innerHTML = `
+              <span class="text-xs text-gray-400">Color ${i + 1}</span>
+              <input type="color" value="${hexColor}" data-index="${i}"
+                     class="w-full h-10 p-0 border-none rounded cursor-pointer"/>
+            `;
+            const colorInput = label.querySelector("input");
+            colorInput.addEventListener("input", (e) => {
+                const newColors = [...getState().config.colors];
+                newColors[i] = e.target.value;
+                updateConfig({ colors: newColors });
+            });
+            container.appendChild(label);
+        }
+        lastColorCount = colorCount;
+    } else {
+        // Solo actualizar valores si no se recrea
+        currentInputs.forEach((input, i) => {
+            if (colors[i] && input.value !== colors[i]) {
+                input.value = colors[i];
+            }
+        });
+    }
+    
+    // Deshabilitar inputs si es necesario
+    container.querySelectorAll('input[type="color"]').forEach(input => {
+        input.disabled = useOriginalColor || isMonochrome;
+    });
+}
+
+
+/**
  * Actualiza los elementos visuales de la UI en base al estado de la aplicación.
  * @param {object} state - El estado actual de la aplicación.
  */
 function updateUI(state) {
-    if (!state) return; // Guard clause
+    if (!state) return;
     const { config, mediaType, mediaInfo } = state;
 
-    // Actualizar valores de sliders y textos
+    // Sincronizar sliders y valores de texto
     elements.brightnessVal.textContent = config.brightness;
     elements.contrastVal.textContent = Math.round(config.contrast * 100);
     elements.saturationVal.textContent = Math.round(config.saturation * 100);
     elements.colorCountVal.textContent = config.colorCount;
     elements.ditherScaleVal.textContent = config.ditherScale;
-    
+    elements.diffusionStrengthVal.textContent = Math.round(config.diffusionStrength * 100);
+    elements.patternStrengthVal.textContent = Math.round(config.patternStrength * 100);
+
     elements.brightnessSlider.value = config.brightness;
     elements.contrastSlider.value = config.contrast * 100;
     elements.saturationSlider.value = config.saturation * 100;
     elements.colorCountSlider.value = config.colorCount;
-    
-    // Sincronizar select de algoritmo
+    elements.ditherScale.value = config.ditherScale;
+    elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
+    elements.patternStrengthSlider.value = config.patternStrength * 100;
+
+    // Sincronizar checkboxes y selects
     elements.effectSelect.value = config.effect;
+    elements.serpentineToggle.checked = config.serpentineScan;
+    elements.monochromeToggle.checked = config.isMonochrome;
+    elements.originalColorToggle.checked = config.useOriginalColor;
+
+    // Actualizar la paleta de colores en la UI
+    updateColorInputs();
 
     // Actualizar panel de información del algoritmo
     elements.infoText.textContent = ALGORITHM_INFO[config.effect] || 'Selecciona un algoritmo.';
@@ -122,14 +210,18 @@ function updateUI(state) {
         elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
         elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
     }
-    
+
     // Actualizar info del medio cargado
     if (mediaType) {
         elements.mediaType.textContent = mediaType.toUpperCase();
         elements.mediaDimensions.textContent = `${mediaInfo.width}x${mediaInfo.height}`;
+        elements.playBtn.disabled = mediaType === 'image';
+        elements.restartBtn.disabled = mediaType === 'image';
     } else {
         elements.mediaType.textContent = 'No cargado';
         elements.mediaDimensions.textContent = '';
+        elements.playBtn.disabled = true;
+        elements.restartBtn.disabled = true;
     }
 }
 
@@ -142,7 +234,8 @@ export function initializeUI() {
 
     // Suscribirse a los eventos de cambio de estado para mantener la UI sincronizada.
     events.on('state:updated', updateUI);
-    events.on('config:updated', updateUI);
-    
+    // Asegurarnos de que también se actualice si solo cambia la config
+    events.on('config:updated', (state) => updateUI(state)); 
+
     console.log('UI Module inicializado.');
 }
