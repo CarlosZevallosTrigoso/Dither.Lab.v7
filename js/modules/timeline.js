@@ -4,17 +4,21 @@
  * ============================================================================
  * - Gestiona toda la interactividad de la timeline, incluyendo reproducción,
  * marcadores, bucles y velocidad.
- * - Manipula directamente el elemento de video cuando es necesario.
+ * - Se vincula dinámicamente al medio de video cuando se carga.
  * - Se comunica con otros módulos a través de eventos.
  * ============================================================================
  */
 import { events } from '../app/events.js';
 import { getState, updateState, updateTimeline } from '../app/state.js';
-import { formatTime } from '../utils/helpers.js';
+import { formatTime, showToast } from '../utils/helpers.js';
 
 let elements = {};
 let isDraggingScrubber = false;
+let currentMedia = null; // Referencia al objeto de video actual
 
+/**
+ * Selecciona los elementos del DOM necesarios para el módulo.
+ */
 function queryElements() {
     const ids = [
         'playBtn', 'restartBtn', 'timelinePanel', 'timeline', 'timelineProgress',
@@ -25,55 +29,91 @@ function queryElements() {
     ids.forEach(id => (elements[id] = document.getElementById(id)));
 }
 
-function bindEventListeners() {
-    const { media } = getState();
+/**
+ * Vincula todos los eventos de la timeline a un objeto de medio específico.
+ * Esta función es clave y se llama cada vez que se carga un nuevo video.
+ * @param {p5.MediaElement} media - El objeto de video de p5.js.
+ */
+function bindToMedia(media) {
+    currentMedia = media;
 
-    // Controles de Reproducción
-    elements.playBtn.addEventListener('click', () => events.emit('playback:toggle'));
-    elements.restartBtn.addEventListener('click', () => {
-        if (getState().mediaType === 'video') events.emit('playback:restart');
-    });
-    elements.prevFrameBtn.addEventListener('click', () => events.emit('playback:prev-frame'));
-    elements.nextFrameBtn.addEventListener('click', () => events.emit('playback:next-frame'));
+    // --- Controles de Reproducción ---
+    elements.playBtn.onclick = () => events.emit('playback:toggle');
+    elements.restartBtn.onclick = () => {
+        if (currentMedia) {
+            currentMedia.time(0);
+            showToast('Reiniciado');
+        }
+    };
+    elements.prevFrameBtn.onclick = () => {
+        if (currentMedia) {
+            const isPlaying = getState().isPlaying;
+            if (isPlaying) events.emit('playback:toggle'); // Pausar
+            currentMedia.time(Math.max(0, currentMedia.time() - 1 / 30));
+        }
+    };
+    elements.nextFrameBtn.onclick = () => {
+        if (currentMedia) {
+            const isPlaying = getState().isPlaying;
+            if (isPlaying) events.emit('playback:toggle'); // Pausar
+            currentMedia.time(Math.min(currentMedia.duration(), currentMedia.time() + 1 / 30));
+        }
+    };
 
-    // Marcadores
-    elements.setInBtn.addEventListener('click', () => updateTimeline({ markerInTime: getState().media.time() }));
-    elements.setOutBtn.addEventListener('click', () => updateTimeline({ markerOutTime: getState().media.time() }));
-    elements.clearMarkersBtn.addEventListener('click', () => updateTimeline({ markerInTime: null, markerOutTime: null }));
-    elements.loopSectionToggle.addEventListener('change', (e) => updateTimeline({ loopSection: e.target.checked }));
+    // --- Marcadores ---
+    elements.setInBtn.onclick = () => {
+        const time = currentMedia.time();
+        updateTimeline({ markerInTime: time });
+        showToast(`Entrada: ${formatTime(time)}`);
+    };
+    elements.setOutBtn.onclick = () => {
+        const time = currentMedia.time();
+        updateTimeline({ markerOutTime: time });
+        showToast(`Salida: ${formatTime(time)}`);
+    };
+    elements.clearMarkersBtn.onclick = () => {
+        updateTimeline({ markerInTime: null, markerOutTime: null });
+        showToast('Marcadores limpiados');
+    };
+    elements.loopSectionToggle.onchange = (e) => {
+        updateTimeline({ loopSection: e.target.checked });
+    };
 
-    // Velocidad
-    elements.playbackSpeedSlider.addEventListener('input', (e) => {
+    // --- Velocidad ---
+    elements.playbackSpeedSlider.oninput = (e) => {
         const speed = parseFloat(e.target.value) / 100;
         updateState({ playbackSpeed: speed });
-        if (getState().mediaType === 'video') getState().media.speed(speed);
-    });
+        currentMedia.speed(speed);
+    };
 
-    // Scrubbing en la timeline
-    elements.timeline.addEventListener('mousedown', (e) => {
-        if (getState().mediaType !== 'video') return;
+    // --- Scrubbing en la timeline ---
+    const updateScrubPosition = (e) => {
+        const { mediaInfo } = getState();
+        if (!currentMedia || !mediaInfo || mediaInfo.duration === 0) return;
+
+        const rect = elements.timeline.getBoundingClientRect();
+        const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const percent = x / rect.width;
+        const time = percent * mediaInfo.duration;
+        currentMedia.time(time);
+        window.triggerRedraw(); // Forzar redibujado inmediato
+    };
+
+    elements.timeline.onmousedown = (e) => {
         isDraggingScrubber = true;
         updateScrubPosition(e);
-    });
-    document.addEventListener('mousemove', (e) => {
+    };
+
+    // Usar 'window' para el mousemove y mouseup para capturar el movimiento
+    // incluso si el cursor sale del área de la timeline.
+    window.onmousemove = (e) => {
         if (isDraggingScrubber) updateScrubPosition(e);
-    });
-    document.addEventListener('mouseup', () => {
+    };
+    window.onmouseup = () => {
         isDraggingScrubber = false;
-    });
+    };
 }
 
-function updateScrubPosition(e) {
-    const { media, mediaInfo } = getState();
-    if (!media || mediaInfo.duration === 0) return;
-
-    const rect = elements.timeline.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const percent = x / rect.width;
-    const time = percent * mediaInfo.duration;
-    media.time(time);
-    window.triggerRedraw(); // Forzar redibujado inmediato
-}
 
 /**
  * Actualiza la UI de la timeline (posición del scrubber, textos, etc.).
@@ -109,6 +149,7 @@ function updateTimelineUI(state) {
 
     // Actualizar indicador de velocidad
     elements.playbackSpeedVal.textContent = playbackSpeed.toFixed(2);
+    elements.playbackSpeedSlider.value = playbackSpeed * 100;
     elements.speedDisplay.classList.toggle('hidden', playbackSpeed === 1);
     elements.speedDisplay.querySelector('span').textContent = `${playbackSpeed.toFixed(2)}x`;
 }
@@ -118,7 +159,7 @@ function updateTimelineUI(state) {
  */
 function handlePlayback() {
     const { media, mediaType, isPlaying, timeline } = getState();
-    if (mediaType !== 'video') return;
+    if (mediaType !== 'video' || !media) return;
 
     // Lógica de bucle
     if (isPlaying && timeline.loopSection && timeline.markerInTime !== null && timeline.markerOutTime !== null) {
@@ -133,7 +174,6 @@ function handlePlayback() {
  */
 export function initializeTimeline() {
     queryElements();
-    bindEventListeners();
 
     // Escuchar cambios de estado para actualizar la UI
     events.on('state:updated', updateTimelineUI);
@@ -141,24 +181,32 @@ export function initializeTimeline() {
 
     // Escuchar cada frame dibujado para la lógica de reproducción
     events.on('render:frame-drawn', handlePlayback);
+    
+    // El cambio clave: escuchar cuando se carga un nuevo medio
+    events.on('media:loaded', (payload) => {
+        if (payload.mediaType === 'video') {
+            bindToMedia(payload.media);
+        } else {
+            currentMedia = null; // Limpiar referencia si no es video
+        }
+    });
 
     // Lógica de control de video
     events.on('playback:toggle', () => {
         const { media, isPlaying } = getState();
         if (!media) return;
-        updateState({ isPlaying: !isPlaying });
-        if (!isPlaying) {
-            media.loop();
+        
+        const newIsPlaying = !isPlaying;
+        updateState({ isPlaying: newIsPlaying });
+        
+        if (newIsPlaying) {
+            media.loop(); // loop() en p5 también inicia la reproducción
             events.emit('playback:play');
         } else {
             media.pause();
             events.emit('playback:pause');
         }
     });
-
-    events.on('playback:restart', () => getState().media?.time(0));
-    events.on('playback:prev-frame', () => getState().media?.time(Math.max(0, getState().media.time() - 1/30)));
-    events.on('playback:next-frame', () => getState().media?.time(Math.min(getState().media.duration(), getState().media.time() + 1/30)));
 
     console.log('Timeline Module inicializado.');
 }
