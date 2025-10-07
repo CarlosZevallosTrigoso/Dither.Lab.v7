@@ -61,8 +61,15 @@ function bindEventListeners() {
         updateConfig({ saturation: parseInt(e.target.value) / 100 });
     }, 16));
 
+    // ✅ AÑADIDO: Listener para resetear ajustes de imagen
     elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
-        events.emit('controls:resetImageAdjustments');
+        updateConfig({
+            brightness: 0,
+            contrast: 1.0,
+            saturation: 1.0
+        });
+        // También resetear curvas
+        events.emit('curves:reset-all');
     });
 
     elements.toggleCurvesBtn.addEventListener('click', () => {
@@ -71,15 +78,27 @@ function bindEventListeners() {
         events.emit('ui:curves-editor-toggled');
     });
 
-    // --- LÓGICA CORREGIDA Y AÑADIDA ---
-
     // Panel de Paleta de Colores
     elements.colorCountSlider.addEventListener('input', debounce((e) => {
-        updateConfig({ colorCount: parseInt(e.target.value) });
+        const newCount = parseInt(e.target.value);
+        updateConfig({ colorCount: newCount });
+        
+        // ✅ MEJORADO: Regenerar paleta automáticamente al cambiar cantidad
+        const { config } = getState();
+        if (config.isMonochrome) {
+            generateMonochromePalette(newCount);
+        }
     }, 150));
     
+    // ✅ MEJORADO: Generar paleta en escala de grises al activar monocromático
     elements.monochromeToggle.addEventListener('change', (e) => {
-        updateConfig({ isMonochrome: e.target.checked });
+        const isMonochrome = e.target.checked;
+        updateConfig({ isMonochrome });
+        
+        if (isMonochrome) {
+            const { config } = getState();
+            generateMonochromePalette(config.colorCount);
+        }
     });
     
     elements.originalColorToggle.addEventListener('change', (e) => {
@@ -103,13 +122,52 @@ function bindEventListeners() {
         updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
     }, 16));
 
-    // --- FIN DE LÓGICA CORREGIDA ---
-
     // Modals
     elements.shortcutsBtn.addEventListener('click', () => elements.shortcutsModal.style.display = 'flex');
     elements.closeShortcutsBtn.addEventListener('click', () => elements.shortcutsModal.style.display = 'none');
     elements.metricsBtn.addEventListener('click', () => elements.metricsModal.style.display = 'flex');
     elements.closeMetricsBtn.addEventListener('click', () => elements.metricsModal.style.display = 'none');
+    
+    // ✅ AÑADIDO: Cerrar modales con evento
+    events.on('ui:close-modals', () => {
+        elements.shortcutsModal.style.display = 'none';
+        elements.metricsModal.style.display = 'none';
+    });
+    
+    // ✅ AÑADIDO: Abrir/cerrar modales con eventos de teclado
+    events.on('ui:toggle-shortcuts-modal', () => {
+        const isVisible = elements.shortcutsModal.style.display === 'flex';
+        elements.shortcutsModal.style.display = isVisible ? 'none' : 'flex';
+    });
+    
+    events.on('ui:toggle-metrics-modal', () => {
+        const isVisible = elements.metricsModal.style.display === 'flex';
+        elements.metricsModal.style.display = isVisible ? 'none' : 'flex';
+    });
+    
+    // ✅ AÑADIDO: Pantalla completa
+    events.on('ui:toggle-fullscreen', () => {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.warn('No se pudo activar pantalla completa:', err);
+            });
+        } else {
+            document.exitFullscreen();
+        }
+    });
+}
+
+/**
+ * ✅ AÑADIDO: Genera una paleta en escala de grises
+ */
+function generateMonochromePalette(colorCount) {
+    const grayPalette = [];
+    for (let i = 0; i < colorCount; i++) {
+        const value = Math.floor((i / (colorCount - 1)) * 255);
+        const hex = '#' + value.toString(16).padStart(2, '0').repeat(3);
+        grayPalette.push(hex);
+    }
+    updateConfig({ colors: grayPalette });
 }
 
 /**
@@ -234,7 +292,6 @@ export function initializeUI() {
 
     // Suscribirse a los eventos de cambio de estado para mantener la UI sincronizada.
     events.on('state:updated', updateUI);
-    // Asegurarnos de que también se actualice si solo cambia la config
     events.on('config:updated', (state) => updateUI(state)); 
 
     console.log('UI Module inicializado.');
