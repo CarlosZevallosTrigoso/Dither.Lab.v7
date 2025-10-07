@@ -67,6 +67,33 @@ function applyImageAdjustments(pixels, config) {
     }
 }
 
+/**
+ * Encuentra el color más cercano en la paleta a un color dado.
+ * @param {number} r - Canal rojo del color original.
+ * @param {number} g - Canal verde del color original.
+ * @param {number} b - Canal azul del color original.
+ * @param {Array<p5.Color>} palette - Array de colores de la paleta (objetos p5.Color).
+ * @returns {p5.Color} El color más cercano de la paleta.
+ */
+function findClosestColor(r, g, b, palette) {
+    let closestColor = palette[0];
+    let minDistance = Infinity;
+
+    for (const color of palette) {
+        const dr = r - color.levels[0];
+        const dg = g - color.levels[1];
+        const db = b - color.levels[2];
+        // Usamos la distancia euclidiana al cuadrado (más rápido que la raíz cuadrada)
+        const distance = dr * dr + dg * dg + db * db;
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestColor = color;
+        }
+    }
+    return closestColor;
+}
+
 
 export function drawPosterize(p, buffer, src, config, lumaLUT) {
   const { ditherScale, useOriginalColor } = config;
@@ -102,78 +129,89 @@ export function drawPosterize(p, buffer, src, config, lumaLUT) {
   buffer.updatePixels();
 }
 
-export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
-  const { effect, serpentineScan, diffusionStrength, patternStrength, colorCount } = config;
-  const pw = buffer.width;
-  const ph = buffer.height;
-  
-  buffer.image(src, 0, 0, pw, ph);
-  buffer.loadPixels();
-  
-  const pix = buffer.pixels;
-  applyImageAdjustments(pix, config);
+export function drawDither(p, buffer, src, config, colorCache, bayerLUT) {
+    const { effect, serpentineScan, diffusionStrength, patternStrength, colorCount, colors } = config;
+    const pw = buffer.width;
+    const ph = buffer.height;
 
-  if (effect === 'bayer') {
-    const levels = colorCount;
-    const baseStrength = 255 / levels;
-    const ditherStrength = baseStrength * patternStrength * 2;
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
     
-    for (let y = 0; y < ph; y++) {
-      for (let x = 0; x < pw; x++) {
-        const i = (y * pw + x) * 4;
-        const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
-        const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-        const adjustedLuma = Math.min(255, Math.max(0, luma + ditherOffset));
-        const [r, g, b] = lumaLUT.map(adjustedLuma);
-        pix[i] = r;
-        pix[i + 1] = g;
-        pix[i + 2] = b;
-      }
-    }
-  } else {
-    const kernel = KERNELS[effect];
-    if (!kernel) return; // Algoritmo de difusión de error no encontrado
-    
-    const levels = colorCount;
-    const step = 255 / (levels > 1 ? levels - 1 : 1);
-    
-    for (let y = 0; y < ph; y++) {
-      const isReversed = serpentineScan && y % 2 === 1;
-      const xStart = isReversed ? pw - 1 : 0;
-      const xEnd = isReversed ? -1 : pw;
-      const xStep = isReversed ? -1 : 1;
-      
-      for (let x = xStart; x !== xEnd; x += xStep) {
-        const i = (y * pw + x) * 4;
-        const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-        const newLuma = Math.round(oldLuma / step) * step;
-        const [r, g, b] = lumaLUT.map(newLuma);
-        
-        pix[i] = r;
-        pix[i + 1] = g;
-        pix[i + 2] = b;
-        
-        const err = (oldLuma - newLuma) * diffusionStrength;
-        
-        for (const pt of kernel.points) {
-          const dx = isReversed ? -pt.dx : pt.dx;
-          const nx = x + dx;
-          const ny = y + pt.dy;
-          
-          if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
-            const ni = (ny * pw + nx) * 4;
-            const weight = pt.w / kernel.divisor;
-            const adjustment = err * weight;
-            pix[ni] += adjustment;
-            pix[ni + 1] += adjustment;
-            pix[ni + 2] += adjustment;
-          }
+    const p5colors = colorCache.getColors(colors);
+
+    if (effect === 'bayer') {
+        const levels = colorCount;
+        const baseStrength = 255 / levels;
+        const ditherStrength = baseStrength * patternStrength * 2;
+
+        for (let y = 0; y < ph; y++) {
+            for (let x = 0; x < pw; x++) {
+                const i = (y * pw + x) * 4;
+                const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
+                
+                const r_old = pix[i] + ditherOffset;
+                const g_old = pix[i+1] + ditherOffset;
+                const b_old = pix[i+2] + ditherOffset;
+
+                const newColor = findClosestColor(r_old, g_old, b_old, p5colors);
+
+                pix[i] = newColor.levels[0];
+                pix[i + 1] = newColor.levels[1];
+                pix[i + 2] = newColor.levels[2];
+            }
         }
-      }
+    } else {
+        const kernel = KERNELS[effect];
+        if (!kernel) return; // Algoritmo de difusión de error no encontrado
+
+        for (let y = 0; y < ph; y++) {
+            const isReversed = serpentineScan && y % 2 === 1;
+            const xStart = isReversed ? pw - 1 : 0;
+            const xEnd = isReversed ? -1 : pw;
+            const xStep = isReversed ? -1 : 1;
+
+            for (let x = xStart; x !== xEnd; x += xStep) {
+                const i = (y * pw + x) * 4;
+                
+                const oldR = pix[i];
+                const oldG = pix[i + 1];
+                const oldB = pix[i + 2];
+
+                const newColor = findClosestColor(oldR, oldG, oldB, p5colors);
+                const newR = newColor.levels[0];
+                const newG = newColor.levels[1];
+                const newB = newColor.levels[2];
+
+                pix[i] = newR;
+                pix[i + 1] = newG;
+                pix[i + 2] = newB;
+
+                const errR = (oldR - newR) * diffusionStrength;
+                const errG = (oldG - newG) * diffusionStrength;
+                const errB = (oldB - newB) * diffusionStrength;
+
+                for (const pt of kernel.points) {
+                    const dx = isReversed ? -pt.dx : pt.dx;
+                    const nx = x + dx;
+                    const ny = y + pt.dy;
+
+                    if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
+                        const ni = (ny * pw + nx) * 4;
+                        const weight = pt.w / kernel.divisor;
+                        
+                        pix[ni]     = pix[ni]     + errR * weight;
+                        pix[ni + 1] = pix[ni + 1] + errG * weight;
+                        pix[ni + 2] = pix[ni + 2] + errB * weight;
+                    }
+                }
+            }
+        }
     }
-  }
-  
-  buffer.updatePixels();
+
+    buffer.updatePixels();
 }
 
 export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
