@@ -9,7 +9,7 @@
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
-import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js'; // Asumimos que moveremos estas clases a un nuevo archivo
+import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { drawDither, drawPosterize, drawBlueNoise, drawVariableError } from './algorithms.js';
 
 // Creamos una instancia de la función del sketch que p5.js podrá ejecutar.
@@ -65,7 +65,7 @@ export function sketch(p) {
     redrawHandler();
   };
 
-  p.draw = () => {
+  p.draw = async () => {
     const state = getState();
     const { media, mediaType, config } = state;
 
@@ -110,7 +110,8 @@ export function sketch(p) {
             drawVariableError(p, buffer, media, config, lumaLUT);
             break;
         default:
-          drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
+          // LLAMADA CORREGIDA: Se pasa colorCache para manejar colores correctamente.
+          drawDither(p, buffer, media, config, colorCache, bayerLUT);
       }
       p.image(buffer, 0, 0, p.width, p.height);
 
@@ -118,7 +119,13 @@ export function sketch(p) {
       // Si no hay dithering, solo aplicar ajustes de imagen
       const buffer = bufferPool.get(p.width, p.height, p);
       buffer.image(media, 0, 0, p.width, p.height);
-      // La función applyImageAdjustments se llamará dentro de los algoritmos
+
+      // BLOQUE AÑADIDO: Aplicar ajustes directamente si no hay efecto.
+      buffer.loadPixels();
+      const { applyImageAdjustments } = await import('./algorithms.js');
+      applyImageAdjustments(buffer.pixels, config);
+      buffer.updatePixels();
+      
       p.image(buffer, 0, 0, p.width, p.height);
     }
 
