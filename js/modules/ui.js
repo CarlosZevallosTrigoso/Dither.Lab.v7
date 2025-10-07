@@ -9,7 +9,8 @@
  */
 import { events } from '../app/events.js';
 import { updateConfig } from '../app/state.js';
-import { ALGORITHM_INFO, ALGORITHM_NAMES } from '../core/constants.js';
+// LÍNEA CORREGIDA: Se añade la importación de 'KERNELS'.
+import { ALGORITHM_INFO, ALGORITHM_NAMES, KERNELS } from '../core/constants.js'; 
 import { throttle, debounce } from '../utils/helpers.js';
 
 // Un objeto para mantener referencias a todos los elementos del DOM.
@@ -89,6 +90,7 @@ function bindEventListeners() {
  * @param {object} state - El estado actual de la aplicación.
  */
 function updateUI(state) {
+    if (!state) return; // Guard clause
     const { config, mediaType, mediaInfo } = state;
 
     // Actualizar valores de sliders y textos
@@ -130,7 +132,6 @@ function updateUI(state) {
         elements.mediaDimensions.textContent = '';
     }
 }
-
 
 /**
  * Inicializa el módulo de UI.
