@@ -2,26 +2,99 @@
  * ============================================================================
  * DitherLab v7 - Módulo de Gestión de Archivos (File Handler)
  * ============================================================================
- * - Encapsula toda la lógica para cargar y procesar los archivos de
- * imagen y video del usuario.
- * - Gestiona el Drag & Drop y el input de tipo 'file'.
- * - Emite el evento 'media:loaded' cuando un archivo se ha cargado
- * correctamente, pasando la información necesaria a otros módulos.
+ * - Encapsula toda la lógica para cargar y procesar los archivos.
+ * - Incluye la generación automática de paletas desde el medio.
  * ============================================================================
  */
 import { events } from '../app/events.js';
-// LÍNEA CORREGIDA: Se añade 'getState' a la importación.
-import { updateState, getState } from '../app/state.js';
+import { updateState, getState, updateConfig } from '../app/state.js';
 import { showToast } from '../utils/helpers.js';
 
-let currentFileURL = null; // Para gestionar y revocar ObjectURLs
+let currentFileURL = null;
 
 /**
- * Calcula las dimensiones óptimas del canvas para ajustarse al contenedor.
- * @param {number} mediaWidth - Ancho del medio original.
- * @param {number} mediaHeight - Alto del medio original.
- * @returns {{width: number, height: number}} - Dimensiones del canvas.
+ * Genera una paleta de colores usando el algoritmo k-means++ desde el medio.
+ * @param {p5.MediaElement|p5.Image} media - El elemento de video o imagen.
+ * @param {number} colorCount - El número de colores a extraer.
+ * @param {p5} p - La instancia de p5.js.
+ * @returns {Promise<string[]>} Una promesa que resuelve a un array de colores hexadecimales.
  */
+async function generatePaletteFromMedia(media, colorCount, p) {
+    showToast('Generando paleta desde el medio...');
+    const tempCanvas = p.createGraphics(100, 100);
+    tempCanvas.pixelDensity(1);
+
+    if (getState().mediaType === 'video') {
+        media.pause();
+        media.time(0);
+        await new Promise(r => setTimeout(r, 200)); // Esperar que el frame se actualice
+    }
+    
+    tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCanvas.loadPixels();
+    
+    const pixels = [];
+    for (let i = 0; i < tempCanvas.pixels.length; i += 4) {
+        pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
+    }
+
+    // Algoritmo k-means++ para seleccionar centroides iniciales
+    const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
+    let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
+    
+    while (centroids.length < colorCount) {
+        const distances = pixels.map(px => {
+            let minDist = Infinity;
+            centroids.forEach(c => { minDist = Math.min(minDist, colorDist(px, c)); });
+            return minDist * minDist;
+        });
+        const sumDist = distances.reduce((a, b) => a + b, 0);
+        let rand = Math.random() * sumDist;
+        for (let i = 0; i < pixels.length; i++) {
+            rand -= distances[i];
+            if (rand <= 0) {
+                centroids.push(pixels[i]);
+                break;
+            }
+        }
+    }
+
+    // Iteraciones de k-means
+    for (let iter = 0; iter < 10; iter++) {
+        const assignments = pixels.map(px => {
+            let bestCentroid = 0;
+            let minDist = Infinity;
+            centroids.forEach((c, j) => {
+                const dist = colorDist(px, c);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestCentroid = j;
+                }
+            });
+            return bestCentroid;
+        });
+
+        const newCentroids = Array(colorCount).fill(0).map(() => [0,0,0]);
+        const counts = Array(colorCount).fill(0);
+        pixels.forEach((px, i) => {
+            const centroidIndex = assignments[i];
+            newCentroids[centroidIndex][0] += px[0];
+            newCentroids[centroidIndex][1] += px[1];
+            newCentroids[centroidIndex][2] += px[2];
+            counts[centroidIndex]++;
+        });
+
+        centroids = newCentroids.map((sum, i) => counts[i] > 0 ? sum.map(v => Math.round(v / counts[i])) : centroids[i]);
+    }
+    
+    tempCanvas.remove();
+    
+    // Ordenar por luminancia y convertir a hexadecimal
+    centroids.sort((a,b) => (a[0]*0.299 + a[1]*0.587 + a[2]*0.114) - (b[0]*0.299 + b[1]*0.587 + b[2]*0.114));
+    return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
+}
+
+
 function calculateCanvasDimensions(mediaWidth, mediaHeight) {
     const container = document.getElementById('canvasContainer');
     const padding = 32;
@@ -29,9 +102,7 @@ function calculateCanvasDimensions(mediaWidth, mediaHeight) {
     const availableHeight = container.clientHeight - padding;
     const mediaAspect = mediaWidth / mediaHeight;
     const containerAspect = availableWidth / availableHeight;
-
     let canvasW, canvasH;
-
     if (mediaAspect > containerAspect) {
         canvasW = availableWidth;
         canvasH = canvasW / mediaAspect;
@@ -39,15 +110,9 @@ function calculateCanvasDimensions(mediaWidth, mediaHeight) {
         canvasH = availableHeight;
         canvasW = canvasH * mediaAspect;
     }
-    
-    return { width: Math.floor(canvasW), height: Math.floor(canvasH) };
+    return { width: Math.max(100, Math.floor(canvasW)), height: Math.max(100, Math.floor(canvasH)) };
 }
 
-/**
- * Procesa el archivo seleccionado por el usuario.
- * @param {File} file - El archivo a procesar.
- * @param {p5} p - La instancia de p5.js para crear elementos multimedia.
- */
 async function handleFile(file, p) {
     const fileType = file.type;
     const isVideo = fileType.startsWith('video/');
@@ -58,64 +123,46 @@ async function handleFile(file, p) {
         return;
     }
 
-    // Si había un medio cargado, lo liberamos.
     let { media } = getState();
-    if (media && typeof media.remove === 'function') {
-        media.remove();
-    }
-    if (currentFileURL) {
-        URL.revokeObjectURL(currentFileURL);
-    }
+    if (media && typeof media.remove === 'function') media.remove();
+    if (currentFileURL) URL.revokeObjectURL(currentFileURL);
 
     currentFileURL = URL.createObjectURL(file);
     const mediaType = isVideo ? 'video' : 'image';
 
-    const loadPromise = new Promise((resolve, reject) => {
-        const callback = (mediaElement) => {
-            if (mediaElement.width > 0 || (mediaElement.elt && mediaElement.elt.readyState >= 1)) {
-                resolve(mediaElement);
-            } else {
-                // Si la imagen no carga inmediatamente, puede ser un error
-                setTimeout(() => reject(new Error("No se pudo cargar el medio.")), 3000);
-            }
-        };
-        
-        if (isVideo) {
-            const videoElement = p.createVideo(currentFileURL, () => resolve(videoElement));
-            videoElement.elt.addEventListener('error', reject);
-        } else {
-            p.loadImage(currentFileURL, callback, () => reject(new Error("Error al cargar la imagen")));
-        }
-    });
-
     try {
-        const mediaElement = await loadPromise;
-        mediaElement.hide();
+        const mediaElement = await new Promise((resolve, reject) => {
+            if (isVideo) {
+                const video = p.createVideo(currentFileURL, () => resolve(video));
+                video.elt.addEventListener('error', () => reject(new Error('Error al cargar el video.')));
+            } else {
+                p.loadImage(currentFileURL, img => resolve(img), () => reject(new Error('Error al cargar la imagen.')));
+            }
+        });
+
+        if (isVideo) mediaElement.hide();
 
         const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(mediaElement.width, mediaElement.height);
-
-        const mediaInfo = {
+        
+        updateState({ media: mediaElement, mediaType, mediaInfo: {
             width: mediaElement.width,
             height: mediaElement.height,
             duration: isVideo ? mediaElement.duration() : 0,
             fileName: file.name
-        };
-        
-        updateState({ media: mediaElement, mediaType, mediaInfo });
+        }});
+
+        const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
+        updateConfig({ colors: newPalette });
+
         events.emit('media:loaded', { canvasWidth, canvasHeight });
-        showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado: ${file.name}`);
+        showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado.`);
 
     } catch (error) {
-        console.error(error);
-        showToast('Error al cargar el archivo.');
+        console.error("Error en handleFile:", error);
+        showToast('No se pudo cargar el archivo.');
     }
 }
 
-
-/**
- * Inicializa los listeners de eventos para la carga de archivos.
- * @param {p5} p - La instancia de p5.js.
- */
 export function initializeFileHandler(p) {
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
@@ -125,7 +172,7 @@ export function initializeFileHandler(p) {
         dropZone.classList.add("border-cyan-400");
     });
     document.body.addEventListener("dragleave", (e) => {
-        if (e.relatedTarget === null) {
+        if (!dropZone.contains(e.relatedTarget)) {
            dropZone.classList.remove("border-cyan-400");
         }
     });
