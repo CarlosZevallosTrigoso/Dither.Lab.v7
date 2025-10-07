@@ -10,26 +10,19 @@
  */
 import { events } from './events.js';
 
-// Estado inicial y por defecto de la aplicación.
 const state = {
   media: null,
-  mediaType: null, // 'image' o 'video'
-  mediaInfo: {
-    width: 0,
-    height: 0,
-    duration: 0,
-    fileName: ''
-  },
+  mediaType: null,
+  mediaInfo: { width: 0, height: 0, duration: 0, fileName: '' },
   isPlaying: false,
   isRecording: false,
   playbackSpeed: 1,
-
   config: {
     effect: 'floyd-steinberg',
     isMonochrome: false,
     useOriginalColor: false,
     colorCount: 4,
-    colors: ['#000000', '#555555', '#AAAAAA', '#FFFFFF'], // Paleta inicial
+    colors: ['#000000', '#555555', '#AAAAAA', '#FFFFFF'],
     ditherScale: 2,
     serpentineScan: false,
     diffusionStrength: 1,
@@ -37,22 +30,14 @@ const state = {
     brightness: 0,
     contrast: 1.0,
     saturation: 1.0,
-    curvesLUTs: null // Look-Up Tables generadas por el editor de curvas
+    curvesLUTs: null
   },
-
   timeline: {
     markerInTime: null,
     markerOutTime: null,
     loopSection: false
   },
-
-  metrics: {
-    psnr: 0,
-    ssim: 0,
-    compression: 0,
-    paletteSize: 0,
-    processTime: 0
-  }
+  metrics: { psnr: 0, ssim: 0, compression: 0, paletteSize: 0, processTime: 0 }
 };
 
 /**
@@ -61,6 +46,7 @@ const state = {
  */
 export function updateState(newState) {
   Object.assign(state, newState);
+  // Se emite una copia superficial para evitar el error de JSON.
   events.emit('state:updated', { ...state });
 }
 
@@ -70,6 +56,7 @@ export function updateState(newState) {
  */
 export function updateConfig(newConfig) {
   Object.assign(state.config, newConfig);
+  // Se emite una copia superficial.
   events.emit('config:updated', { ...state });
 }
 
@@ -79,14 +66,16 @@ export function updateConfig(newConfig) {
  */
 export function updateTimeline(newTimelineState) {
     Object.assign(state.timeline, newTimelineState);
+    // Se emite una copia superficial.
     events.emit('timeline:updated', { ...state });
 }
 
 /**
- * Devuelve una copia inmutable del estado actual para prevenir modificaciones directas.
+ * Devuelve una copia superficial del estado actual.
  * @returns {object} El estado completo de la aplicación.
  */
 export function getState() {
-  // Se clona para evitar que otros módulos modifiquen el estado original por referencia.
-  return JSON.parse(JSON.stringify(state));
+  // Se devuelve una copia superficial (`{...state}`) en lugar de usar JSON.
+  // Esto evita el error de "circular structure" con los objetos de p5.js.
+  return { ...state };
 }
