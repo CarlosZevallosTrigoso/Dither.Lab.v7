@@ -87,9 +87,23 @@ export function sketch(p) {
     
     // Lógica principal de renderizado
     const isDitheringActive = config.effect !== 'none';
-    const p5colors = colorCache.getColors(config.colors);
+    
+    // ✅ CORREGIDO: Construir colores p5 correctamente
+    const p5colors = config.colors.map(hexColor => p.color(hexColor));
 
-    if (lumaLUT.needsRebuild(p5colors)) {
+    // ✅ CORREGIDO: Reconstruir LUT cuando cambian los colores
+    const colorsChanged = !lumaLUT.cachedColors || 
+                         lumaLUT.cachedColors.length !== p5colors.length ||
+                         config.colors.some((color, i) => {
+                             const cached = lumaLUT.cachedColors[i];
+                             if (!cached) return true;
+                             const currentColor = p5colors[i];
+                             return p.red(cached) !== p.red(currentColor) ||
+                                    p.green(cached) !== p.green(currentColor) ||
+                                    p.blue(cached) !== p.blue(currentColor);
+                         });
+    
+    if (colorsChanged || !lumaLUT.lut) {
         lumaLUT.build(p5colors, p);
     }
     
@@ -107,10 +121,9 @@ export function sketch(p) {
           drawBlueNoise(p, buffer, media, config, lumaLUT, blueNoiseLUT);
           break;
         case 'variable-error':
-            drawVariableError(p, buffer, media, config, lumaLUT);
-            break;
+          drawVariableError(p, buffer, media, config, lumaLUT);
+          break;
         default:
-          // LLAMADA CORREGIDA FINAL: Volvemos a pasar lumaLUT, que es lo que la función espera.
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
       p.image(buffer, 0, 0, p.width, p.height);
