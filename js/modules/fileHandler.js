@@ -10,7 +10,8 @@
  * ============================================================================
  */
 import { events } from '../app/events.js';
-import { updateState } from '../app/state.js';
+// LÍNEA CORREGIDA: Se añade 'getState' a la importación.
+import { updateState, getState } from '../app/state.js';
 import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null; // Para gestionar y revocar ObjectURLs
@@ -23,7 +24,7 @@ let currentFileURL = null; // Para gestionar y revocar ObjectURLs
  */
 function calculateCanvasDimensions(mediaWidth, mediaHeight) {
     const container = document.getElementById('canvasContainer');
-    const padding = 32; // Espacio de margen dentro del contenedor
+    const padding = 32;
     const availableWidth = container.clientWidth - padding;
     const availableHeight = container.clientHeight - padding;
     const mediaAspect = mediaWidth / mediaHeight;
@@ -59,10 +60,8 @@ async function handleFile(file, p) {
 
     // Si había un medio cargado, lo liberamos.
     let { media } = getState();
-    if (media) {
-        if (media.elt && typeof media.remove === 'function') {
-            media.remove();
-        }
+    if (media && typeof media.remove === 'function') {
+        media.remove();
     }
     if (currentFileURL) {
         URL.revokeObjectURL(currentFileURL);
@@ -71,36 +70,45 @@ async function handleFile(file, p) {
     currentFileURL = URL.createObjectURL(file);
     const mediaType = isVideo ? 'video' : 'image';
 
-    const mediaElement = isVideo
-        ? p.createVideo(currentFileURL)
-        : p.loadImage(currentFileURL);
+    const loadPromise = new Promise((resolve, reject) => {
+        const callback = (mediaElement) => {
+            if (mediaElement.width > 0 || (mediaElement.elt && mediaElement.elt.readyState >= 1)) {
+                resolve(mediaElement);
+            } else {
+                // Si la imagen no carga inmediatamente, puede ser un error
+                setTimeout(() => reject(new Error("No se pudo cargar el medio.")), 3000);
+            }
+        };
         
-    mediaElement.hide();
-
-    // Esperar a que el medio se cargue para obtener sus dimensiones
-    await new Promise((resolve) => {
         if (isVideo) {
-            mediaElement.elt.addEventListener('loadedmetadata', resolve, { once: true });
+            const videoElement = p.createVideo(currentFileURL, () => resolve(videoElement));
+            videoElement.elt.addEventListener('error', reject);
         } else {
-            mediaElement.width > 0 ? resolve() : setTimeout(resolve, 100); // Pequeña espera para imágenes
+            p.loadImage(currentFileURL, callback, () => reject(new Error("Error al cargar la imagen")));
         }
     });
 
-    const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(mediaElement.width, mediaElement.height);
+    try {
+        const mediaElement = await loadPromise;
+        mediaElement.hide();
 
-    const mediaInfo = {
-        width: mediaElement.width,
-        height: mediaElement.height,
-        duration: isVideo ? mediaElement.duration() : 0,
-        fileName: file.name
-    };
-    
-    // Actualizamos el estado global
-    updateState({ media: mediaElement, mediaType, mediaInfo });
+        const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(mediaElement.width, mediaElement.height);
 
-    // Notificamos al resto de la app que el medio está listo
-    events.emit('media:loaded', { canvasWidth, canvasHeight });
-    showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado: ${file.name}`);
+        const mediaInfo = {
+            width: mediaElement.width,
+            height: mediaElement.height,
+            duration: isVideo ? mediaElement.duration() : 0,
+            fileName: file.name
+        };
+        
+        updateState({ media: mediaElement, mediaType, mediaInfo });
+        events.emit('media:loaded', { canvasWidth, canvasHeight });
+        showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado: ${file.name}`);
+
+    } catch (error) {
+        console.error(error);
+        showToast('Error al cargar el archivo.');
+    }
 }
 
 
@@ -112,13 +120,14 @@ export function initializeFileHandler(p) {
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
 
-    // Drag & Drop
     document.body.addEventListener("dragover", e => {
         e.preventDefault();
         dropZone.classList.add("border-cyan-400");
     });
-    document.body.addEventListener("dragleave", () => {
-        dropZone.classList.remove("border-cyan-400");
+    document.body.addEventListener("dragleave", (e) => {
+        if (e.relatedTarget === null) {
+           dropZone.classList.remove("border-cyan-400");
+        }
     });
     document.body.addEventListener("drop", e => {
         e.preventDefault();
@@ -128,7 +137,6 @@ export function initializeFileHandler(p) {
         }
     });
 
-    // Click
     dropZone.addEventListener("click", () => fileInput.click());
     fileInput.addEventListener("change", e => {
         if (e.target.files.length > 0) {
