@@ -14,7 +14,7 @@ import { KERNELS } from './constants.js';
  * @param {Uint8ClampedArray} pixels - El array de píxeles del canvas (Ej: buffer.pixels).
  * @param {object} config - El objeto de configuración del estado de la aplicación.
  */
-function applyImageAdjustments(pixels, config) {
+export function applyImageAdjustments(pixels, config) {
     const { brightness, contrast, saturation, curvesLUTs } = config;
 
     const hasBasicAdjustments = brightness !== 0 || contrast !== 1.0 || saturation !== 1.0;
