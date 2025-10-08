@@ -14,7 +14,7 @@ function calculateCanvasDimensions() {
     const container = document.getElementById('canvasContainer');
     if (!container) return { width: 400, height: 225 };
 
-    // Lee el estilo CSS real del contenedor
+    // Lee el estilo CSS real del contenedor para un cálculo dinámico
     const style = window.getComputedStyle(container);
     const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
     const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
@@ -42,6 +42,7 @@ function calculateCanvasDimensions() {
     return { width: Math.max(100, Math.floor(canvasW)), height: Math.max(100, Math.floor(canvasH)) };
 }
 
+
 export function sketch(p) {
   let canvas;
   let bufferPool;
@@ -56,8 +57,10 @@ export function sketch(p) {
 
   p.setup = () => {
     const { width, height } = calculateCanvasDimensions();
+    // ✅ CORRECCIÓN: Usar p.WEBGL para forzar la aceleración por hardware
     canvas = p.createCanvas(width, height, p.WEBGL);
     canvas.parent('canvasContainer');
+    // La siguiente línea ya no es necesaria en modo WEBGL, pero no causa daño
     canvas.elt.getContext('2d', { willReadFrequently: true, alpha: false });
     p.pixelDensity(1);
     p.noSmooth();
@@ -133,11 +136,11 @@ export function sketch(p) {
     p.background(0);
 
     if (!media) {
+      // Dibujar texto en WEBGL es diferente, pero por ahora lo dejamos simple.
+      // Para un texto más complejo, necesitaríamos p.createGraphics para 2D.
       p.fill(128);
-      p.textFont('monospace');
-      p.textSize(20);
       p.textAlign(p.CENTER, p.CENTER);
-      p.text('Arrastra un video o imagen\npara comenzar', p.width / 2, p.height / 2);
+      p.text('Arrastra un video o imagen\npara comenzar', 0, 0);
       needsRedraw = false;
       return;
     }
@@ -177,7 +180,7 @@ export function sketch(p) {
         default:
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
-      p.image(buffer, 0, 0, p.width, p.height);
+      p.image(buffer, -p.width/2, -p.height/2, p.width, p.height);
 
     } else {
       const buffer = bufferPool.get(p.width, p.height, p);
@@ -187,7 +190,7 @@ export function sketch(p) {
       applyImageAdjustments(buffer.pixels, config);
       buffer.updatePixels();
       
-      p.image(buffer, 0, 0, p.width, p.height);
+      p.image(buffer, -p.width/2, -p.height/2, p.width, p.height);
     }
 
     events.emit('render:frame-drawn');
