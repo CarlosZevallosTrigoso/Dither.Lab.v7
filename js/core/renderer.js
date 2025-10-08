@@ -11,15 +11,22 @@ import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js
 import { debounce } from '../utils/helpers.js';
 
 function calculateCanvasDimensions() {
+    const container = document.getElementById('canvasContainer');
+    if (!container) return { width: 400, height: 225 };
+
+    // Lee el estilo CSS real del contenedor
+    const style = window.getComputedStyle(container);
+    const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+
+    const availableWidth = container.clientWidth - paddingX;
+    const availableHeight = container.clientHeight - paddingY;
+
     const { mediaInfo } = getState();
     if (!mediaInfo || mediaInfo.width === 0) {
         return { width: 400, height: 225 };
     }
 
-    const container = document.getElementById('canvasContainer');
-    const padding = 32;
-    const availableWidth = container.clientWidth - padding;
-    const availableHeight = container.clientHeight - padding;
     const mediaAspect = mediaInfo.width / mediaInfo.height;
     const containerAspect = availableWidth / availableHeight;
     let canvasW, canvasH;
