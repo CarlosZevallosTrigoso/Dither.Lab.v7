@@ -2,9 +2,6 @@
  * ============================================================================
  * DitherLab v7 - Módulo de Gestión de Archivos (File Handler)
  * ============================================================================
- * - Encapsula toda la lógica para cargar y procesar los archivos.
- * - Incluye la generación automática de paletas desde el medio.
- * ============================================================================
  */
 import { events } from '../app/events.js';
 import { updateState, getState, updateConfig } from '../app/state.js';
@@ -21,8 +18,15 @@ async function generatePaletteFromMedia(media, colorCount, p) {
 
     if (getState().mediaType === 'video') {
         media.pause();
-        media.time(0);
-        await new Promise(r => setTimeout(r, 250));
+        
+        await new Promise(resolve => {
+            media.elt.onseeked = () => {
+                media.elt.onseeked = null;
+                resolve();
+            };
+            media.time(0);
+        });
+        
         sourceImage = media.get();
     }
     
@@ -40,7 +44,8 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         showToast("No se pudieron leer los colores del video.", 3000);
         return ['#000000', '#FFFFFF'];
     }
-    
+
+    // ... (k-means logic)
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
@@ -134,8 +139,11 @@ async function handleFile(file, p) {
             }
         });
 
-        // ✅ La llamada a media:loaded ahora le dirá al renderer que calcule el tamaño
-        events.emit('media:loaded');
+        // ✅ CORRECCIÓN FINAL: Emitir el evento con los datos necesarios
+        events.emit('media:loaded', {
+            media: mediaElement,
+            mediaType
+        });
 
         const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         updateConfig({ colors: newPalette });
