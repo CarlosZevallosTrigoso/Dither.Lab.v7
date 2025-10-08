@@ -36,25 +36,30 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     if (getState().mediaType === 'video') {
         media.pause();
         
-        // ✅ CORRECCIÓN DEFINITIVA: Añadir una pequeña pausa DESPUÉS de 'onseeked'
-        // para dar tiempo al navegador a decodificar el fotograma antes de leerlo.
+        // ✅ SOLUCIÓN DEFINITIVA: Usar requestAnimationFrame para sincronizar con el ciclo de renderizado del navegador.
+        // Esto garantiza que el fotograma del video esté completamente listo antes de intentar leerlo.
         await new Promise(resolve => {
             media.elt.onseeked = () => {
-                setTimeout(() => {
-                    media.elt.onseeked = null;
-                    resolve();
-                }, 100); // 100ms de espera es un valor seguro.
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => { // Esperar dos ciclos por seguridad
+                        media.elt.onseeked = null;
+                        resolve();
+                    });
+                });
             };
             media.time(0);
         });
         
         sourceImage = media.get();
-        // Fallback por si media.get() falla, dibujar directamente el elemento.
-        if (!sourceImage || sourceImage.width === 0) {
-            sourceImage = media.elt;
-        }
     }
     
+    // Fallback por si la imagen obtenida no es válida
+    if (!sourceImage || sourceImage.width === 0 || sourceImage.height === 0) {
+        showToast("Error crítico al leer el frame del video.", 4000);
+        tempCanvas.remove();
+        return ['#000000', '#FFFFFF'];
+    }
+
     tempCanvas.image(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
     tempCanvas.loadPixels();
     
