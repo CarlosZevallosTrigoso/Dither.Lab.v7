@@ -290,7 +290,8 @@ export function initializeTimeline() {
         updateState({ isPlaying: newIsPlaying });
         
         if (newIsPlaying) {
-            media.loop();
+            // ✅ CORRECCIÓN CLAVE: Usar .play() para iniciar la reproducción.
+            media.play();
             events.emit('playback:play');
         } else {
             media.pause();
