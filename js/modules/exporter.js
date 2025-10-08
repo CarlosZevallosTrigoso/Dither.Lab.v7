@@ -64,7 +64,6 @@ async function exportSpriteSheet() {
         const x = (i % cols) * frameW;
         const y = Math.floor(i / cols) * frameH;
         
-        // ✅ CORRECCIÓN: Usar p5Instance.get() para obtener una p5.Image del canvas.
         spriteSheet.image(p5Instance.get(), x, y, frameW, frameH);
     }
     
@@ -239,10 +238,18 @@ async function exportGif() {
 
         for (let i = 0; i < totalFrames; i++) {
             const time = startTime + (i * frameDuration);
-            media.time(time);
+            
+            // ✅ MEJORA: Usar una promesa con el evento 'onseeked' para asegurar la sincronización.
+            await new Promise(resolve => {
+                media.elt.onseeked = () => {
+                    media.elt.onseeked = null; // Limpiar el listener para que no se dispare de nuevo
+                    resolve();
+                };
+                media.time(time);
+            });
             
             if (window.triggerRedraw) window.triggerRedraw();
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 20)); // Pequeña espera adicional para el renderizado final
 
             gif.addFrame(p5Instance.canvas, { copy: true, delay: 1000 / fps });
             
