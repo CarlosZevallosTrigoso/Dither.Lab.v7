@@ -2,33 +2,26 @@
  * ============================================================================
  * DitherLab v7 - Módulo de Renderizado (p5.js)
  * ============================================================================
- * - Encapsula toda la lógica de p5.js (setup, draw).
- * - Es "agnóstico" a la UI: solo le importa el estado actual para dibujar.
- * - Se suscribe a eventos para saber cuándo necesita redibujar el canvas.
- * ============================================================================
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
-import { debounce } from '../utils/helpers.js'; // ✅ IMPORTANTE: Importar debounce
+import { debounce } from '../utils/helpers.js';
 
-// ✅ MOVIMOS ESTA FUNCIÓN AQUÍ: Lógica para calcular el tamaño del canvas
 function calculateCanvasDimensions() {
     const { mediaInfo } = getState();
     if (!mediaInfo || mediaInfo.width === 0) {
-        return { width: 400, height: 225 }; // Tamaño por defecto
+        return { width: 400, height: 225 };
     }
 
     const container = document.getElementById('canvasContainer');
-    const padding = 32; // p-4 de Tailwind = 1rem * 2 = 32px
+    const padding = 32;
     const availableWidth = container.clientWidth - padding;
     const availableHeight = container.clientHeight - padding;
-
     const mediaAspect = mediaInfo.width / mediaInfo.height;
     const containerAspect = availableWidth / availableHeight;
-
     let canvasW, canvasH;
 
     if (mediaAspect > containerAspect) {
@@ -88,7 +81,6 @@ export function sketch(p) {
         redrawHandler();
     });
 
-    // ✅ CORRECCIÓN: Al restaurar el canvas después de grabar, también redimensionamos
     events.on('export:finished', () => {
         const { width, height } = calculateCanvasDimensions();
         p.resizeCanvas(width, height);
@@ -116,16 +108,14 @@ export function sketch(p) {
     redrawHandler();
   };
 
-  // ✅ NUEVO: p5.js tiene una función especial para el redimensionado de la ventana
   p.windowResized = debounce(() => {
     const { width, height } = calculateCanvasDimensions();
     p.resizeCanvas(width, height);
     needsRedraw = true;
     p.redraw();
-  }, 100); // Usamos debounce para no sobrecargar el navegador
+  }, 100);
 
   p.draw = () => {
-    // ... (El resto de la función p.draw se mantiene exactamente igual)
     const state = getState();
     const { media, mediaType, config } = state;
 
@@ -150,6 +140,7 @@ export function sketch(p) {
     const colorsChanged = !lumaLUT.cachedColors || 
                          lumaLUT.cachedColors.length !== p5colors.length ||
                          config.colors.some((hex, i) => {
+                             if (!lumaLUT.cachedColors[i]) return true;
                              const cached = lumaLUT.cachedColors[i];
                              const current = p.color(hex);
                              return p.red(cached) !== p.red(current) ||
