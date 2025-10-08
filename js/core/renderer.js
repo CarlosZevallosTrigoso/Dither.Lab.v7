@@ -12,96 +12,125 @@ import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
+import { debounce } from '../utils/helpers.js'; // ✅ IMPORTANTE: Importar debounce
 
-// Creamos una instancia de la función del sketch que p5.js podrá ejecutar.
+// ✅ MOVIMOS ESTA FUNCIÓN AQUÍ: Lógica para calcular el tamaño del canvas
+function calculateCanvasDimensions() {
+    const { mediaInfo } = getState();
+    if (!mediaInfo || mediaInfo.width === 0) {
+        return { width: 400, height: 225 }; // Tamaño por defecto
+    }
+
+    const container = document.getElementById('canvasContainer');
+    const padding = 32; // p-4 de Tailwind = 1rem * 2 = 32px
+    const availableWidth = container.clientWidth - padding;
+    const availableHeight = container.clientHeight - padding;
+
+    const mediaAspect = mediaInfo.width / mediaInfo.height;
+    const containerAspect = availableWidth / availableHeight;
+
+    let canvasW, canvasH;
+
+    if (mediaAspect > containerAspect) {
+        canvasW = availableWidth;
+        canvasH = canvasW / mediaAspect;
+    } else {
+        canvasH = availableHeight;
+        canvasW = canvasH * mediaAspect;
+    }
+
+    return { width: Math.max(100, Math.floor(canvasW)), height: Math.max(100, Math.floor(canvasH)) };
+}
+
 export function sketch(p) {
   let canvas;
   let bufferPool;
   let colorCache;
   let lumaLUT, bayerLUT, blueNoiseLUT;
-  let needsRedraw = true; // Flag para optimizar el redibujado de imágenes estáticas
+  let needsRedraw = true;
 
-  // Función global para forzar un redibujado desde otros módulos
   window.triggerRedraw = () => {
     needsRedraw = true;
     p.redraw();
   };
 
   p.setup = () => {
-    canvas = p.createCanvas(400, 225);
+    const { width, height } = calculateCanvasDimensions();
+    canvas = p.createCanvas(width, height);
     canvas.parent('canvasContainer');
     canvas.elt.getContext('2d', { willReadFrequently: true, alpha: false });
     p.pixelDensity(1);
-    p.noSmooth(); // Renderizado pixelado (nearest-neighbor)
+    p.noSmooth();
     canvas.elt.style.imageRendering = 'pixelated';
 
-    // Inicializar clases de optimización
     bufferPool = new BufferPool();
     colorCache = new ColorCache(p);
     lumaLUT = new LumaLUT();
     bayerLUT = new BayerLUT();
     blueNoiseLUT = new BlueNoiseLUT();
 
-    // Desactivamos el bucle por defecto. Solo se dibujará cuando sea necesario.
     p.noLoop();
 
-    // Suscripciones a eventos para controlar el redibujado
     const redrawHandler = () => {
         needsRedraw = true;
         p.redraw();
     };
 
-    // ✅ AMPLIADO: Escuchar todos los eventos que requieren un redibujado
     events.on('state:updated', redrawHandler);
     events.on('config:updated', redrawHandler);
     events.on('timeline:updated', redrawHandler);
     events.on('curves:updated', redrawHandler);
     events.on('presets:loaded', redrawHandler);
 
-    events.on('media:loaded', (mediaState) => {
-        // Ajustar el tamaño del canvas al nuevo medio
-        p.resizeCanvas(mediaState.canvasWidth, mediaState.canvasHeight);
+    events.on('media:loaded', () => {
+        const { width, height } = calculateCanvasDimensions();
+        p.resizeCanvas(width, height);
+        redrawHandler();
+    });
+
+    // ✅ CORRECCIÓN: Al restaurar el canvas después de grabar, también redimensionamos
+    events.on('export:finished', () => {
+        const { width, height } = calculateCanvasDimensions();
+        p.resizeCanvas(width, height);
         redrawHandler();
     });
 
     events.on('playback:play', () => p.loop());
     events.on('playback:pause', () => p.noLoop());
 
-    // ✅ NUEVO: Escuchar la solicitud de cálculo de métricas
     events.on('metrics:calculate', () => {
         const { media } = getState();
         if (!media) return;
 
-        // Crear un buffer con la imagen original sin procesar
         const origBuffer = p.createGraphics(p.width, p.height);
         origBuffer.pixelDensity(1);
         origBuffer.image(media, 0, 0, p.width, p.height);
-
-        // Obtener el canvas procesado actual
         const processedBuffer = p.get();
-
         const psnr = calculatePSNR(origBuffer, processedBuffer);
         const ssim = calculateSSIM(origBuffer, processedBuffer);
         const compression = calculateCompression(processedBuffer);
-
-        // Limpiar el buffer temporal
         origBuffer.remove();
-
-        // Emitir un evento con los resultados para que la UI los muestre
-        events.on('metrics:results', { psnr, ssim, compression });
+        events.emit('metrics:results', { psnr, ssim, compression });
     });
 
-
-    // Dibujar el estado inicial
     redrawHandler();
   };
 
+  // ✅ NUEVO: p5.js tiene una función especial para el redimensionado de la ventana
+  p.windowResized = debounce(() => {
+    const { width, height } = calculateCanvasDimensions();
+    p.resizeCanvas(width, height);
+    needsRedraw = true;
+    p.redraw();
+  }, 100); // Usamos debounce para no sobrecargar el navegador
+
   p.draw = () => {
+    // ... (El resto de la función p.draw se mantiene exactamente igual)
     const state = getState();
     const { media, mediaType, config } = state;
 
     if (mediaType === 'image' && !needsRedraw) {
-      return; // Optimización: no redibujar si es una imagen estática y nada ha cambiado
+      return;
     }
 
     p.background(0);
@@ -116,11 +145,8 @@ export function sketch(p) {
       return;
     }
     
-    // Lógica principal de renderizado
     const isDitheringActive = config.effect !== 'none';
-    
     const p5colors = config.colors.map(hexColor => p.color(hexColor));
-
     const colorsChanged = !lumaLUT.cachedColors || 
                          lumaLUT.cachedColors.length !== p5colors.length ||
                          config.colors.some((hex, i) => {
@@ -140,7 +166,6 @@ export function sketch(p) {
       const ph = Math.floor(p.height / config.ditherScale);
       const buffer = bufferPool.get(pw, ph, p);
 
-      // Delegar a la función de algoritmo correspondiente
       switch(config.effect) {
         case 'posterize':
           drawPosterize(p, buffer, media, config, lumaLUT);
@@ -157,7 +182,6 @@ export function sketch(p) {
       p.image(buffer, 0, 0, p.width, p.height);
 
     } else {
-      // Si no hay dithering, solo aplicar ajustes de imagen
       const buffer = bufferPool.get(p.width, p.height, p);
       buffer.image(media, 0, 0, p.width, p.height);
       
@@ -168,7 +192,6 @@ export function sketch(p) {
       p.image(buffer, 0, 0, p.width, p.height);
     }
 
-    // Emitir un evento para que la UI (ej. timeline) se actualice
     events.emit('render:frame-drawn');
 
     if (mediaType === 'image') {
