@@ -39,6 +39,7 @@ function queryElements() {
         'contrastSlider', 'contrastVal', 'saturationSlider', 'saturationVal',
         'toggleCurvesBtn', 'basicImageControls', 'curvesEditor',
         'metricsBtn', 'metricsModal', 'closeMetricsBtn', 'updateMetricsBtn',
+        'metricPSNR', 'metricSSIM', 'metricCompression', // ✅ Añadidos IDs para métricas
         'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
         'spriteCols', 'spriteFrameCount'
     ];
@@ -80,7 +81,6 @@ function bindEventListeners() {
         }, 16));
     }
 
-    // ✅ Botón resetear ajustes de imagen
     if (elements.resetImageAdjustmentsBtn) {
         elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
             updateConfig({
@@ -88,7 +88,6 @@ function bindEventListeners() {
                 contrast: 1.0,
                 saturation: 1.0
             });
-            // También resetear curvas
             events.emit('curves:reset-all');
             showToast('Ajustes de imagen reseteados');
         });
@@ -112,7 +111,6 @@ function bindEventListeners() {
             const newCount = parseInt(e.target.value);
             updateConfig({ colorCount: newCount });
             
-            // ✅ Regenerar paleta automáticamente si está en monocromático
             const { config } = getState();
             if (config.isMonochrome) {
                 generateMonochromePalette(newCount);
@@ -120,7 +118,6 @@ function bindEventListeners() {
         }, 150));
     }
     
-    // ✅ Toggle monocromático con generación automática de paleta
     if (elements.monochromeToggle) {
         elements.monochromeToggle.addEventListener('change', (e) => {
             const isMonochrome = e.target.checked;
@@ -181,23 +178,6 @@ function bindEventListeners() {
         });
     }
 
-    // ========== Sliders de Sprite Sheet ==========
-    if (elements.spriteColsSlider) {
-        elements.spriteColsSlider.addEventListener('input', (e) => {
-            if (elements.spriteCols) {
-                elements.spriteCols.textContent = e.target.value;
-            }
-        });
-    }
-
-    if (elements.spriteFrameCountSlider) {
-        elements.spriteFrameCountSlider.addEventListener('input', (e) => {
-            if (elements.spriteFrameCount) {
-                elements.spriteFrameCount.textContent = e.target.value;
-            }
-        });
-    }
-
     // ========== Modals ==========
     if (elements.shortcutsBtn) {
         elements.shortcutsBtn.addEventListener('click', () => {
@@ -231,7 +211,7 @@ function bindEventListeners() {
         });
     }
 
-    // ✅ Botón actualizar métricas
+    // ✅ CORREGIDO: Botón de métricas ahora emite un evento
     if (elements.updateMetricsBtn) {
         elements.updateMetricsBtn.addEventListener('click', () => {
             const state = getState();
@@ -239,18 +219,16 @@ function bindEventListeners() {
                 showToast('Carga una imagen o video primero.');
                 return;
             }
-            showToast('Función de métricas avanzadas en desarrollo.');
-            // Aquí iría la lógica de cálculo de métricas usando metrics.js
+            events.emit('metrics:calculate');
+            showToast('Calculando métricas...');
         });
     }
     
-    // ✅ Cerrar modales con eventos
     events.on('ui:close-modals', () => {
         if (elements.shortcutsModal) elements.shortcutsModal.style.display = 'none';
         if (elements.metricsModal) elements.metricsModal.style.display = 'none';
     });
     
-    // ✅ Toggle modales con eventos de teclado
     events.on('ui:toggle-shortcuts-modal', () => {
         if (elements.shortcutsModal) {
             const isVisible = elements.shortcutsModal.style.display === 'flex';
@@ -265,7 +243,6 @@ function bindEventListeners() {
         }
     });
     
-    // ✅ Pantalla completa
     events.on('ui:toggle-fullscreen', () => {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(err => {
@@ -297,9 +274,6 @@ function bindEventListeners() {
     console.log('Event listeners vinculados correctamente.');
 }
 
-/**
- * ✅ Genera una paleta en escala de grises
- */
 function generateMonochromePalette(colorCount) {
     const grayPalette = [];
     for (let i = 0; i < colorCount; i++) {
@@ -310,16 +284,12 @@ function generateMonochromePalette(colorCount) {
     updateConfig({ colors: grayPalette });
 }
 
-/**
- * Crea o actualiza los selectores de color en el DOM.
- */
 function updateColorInputs() {
     const { config } = getState();
     const { colors, colorCount, useOriginalColor, isMonochrome } = config;
 
     if (!elements.colorPickerContainer) return;
 
-    // Deshabilitar controles si se usa color original
     if (elements.monochromeToggle) {
         elements.monochromeToggle.disabled = useOriginalColor;
     }
@@ -330,9 +300,8 @@ function updateColorInputs() {
     const container = elements.colorPickerContainer;
     const currentInputs = container.querySelectorAll('input[type="color"]');
 
-    // ✅ Recrear inputs solo si cambió la cantidad
     if (colorCount !== lastColorCount) {
-        container.innerHTML = ""; // Limpiar
+        container.innerHTML = "";
         
         for (let i = 0; i < colorCount; i++) {
             const hexColor = colors[i] || '#000000';
@@ -353,7 +322,6 @@ function updateColorInputs() {
         }
         lastColorCount = colorCount;
     } else {
-        // Solo actualizar valores existentes
         currentInputs.forEach((input, i) => {
             if (colors[i] && input.value !== colors[i]) {
                 input.value = colors[i];
@@ -361,21 +329,15 @@ function updateColorInputs() {
         });
     }
     
-    // Deshabilitar inputs si es necesario
     container.querySelectorAll('input[type="color"]').forEach(input => {
         input.disabled = useOriginalColor || isMonochrome;
     });
 }
 
-/**
- * Actualiza los elementos visuales de la UI en base al estado de la aplicación.
- * @param {object} state - El estado actual de la aplicación.
- */
 function updateUI(state) {
     if (!state || !state.config) return;
     const { config, mediaType, mediaInfo } = state;
 
-    // ========== Sincronizar valores de sliders ==========
     if (elements.brightnessVal) elements.brightnessVal.textContent = config.brightness;
     if (elements.contrastVal) elements.contrastVal.textContent = Math.round(config.contrast * 100);
     if (elements.saturationVal) elements.saturationVal.textContent = Math.round(config.saturation * 100);
@@ -392,16 +354,13 @@ function updateUI(state) {
     if (elements.diffusionStrengthSlider) elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
     if (elements.patternStrengthSlider) elements.patternStrengthSlider.value = config.patternStrength * 100;
 
-    // ========== Sincronizar checkboxes y selects ==========
     if (elements.effectSelect) elements.effectSelect.value = config.effect;
     if (elements.serpentineToggle) elements.serpentineToggle.checked = config.serpentineScan;
     if (elements.monochromeToggle) elements.monochromeToggle.checked = config.isMonochrome;
     if (elements.originalColorToggle) elements.originalColorToggle.checked = config.useOriginalColor;
 
-    // ========== Actualizar paleta de colores ==========
     updateColorInputs();
 
-    // ========== Panel de información del algoritmo ==========
     if (elements.infoText) {
         elements.infoText.textContent = ALGORITHM_INFO[config.effect] || 'Selecciona un algoritmo.';
     }
@@ -409,7 +368,6 @@ function updateUI(state) {
         elements.effectName.textContent = ALGORITHM_NAMES[config.effect] || 'Desconocido';
     }
 
-    // ========== Visibilidad de paneles de dithering ==========
     const isDithering = config.effect !== "none" && config.effect !== "posterize";
     if (elements.ditherControls) {
         elements.ditherControls.classList.toggle("hidden", !isDithering);
@@ -427,7 +385,6 @@ function updateUI(state) {
         }
     }
 
-    // ========== Info del medio cargado ==========
     if (mediaType) {
         if (elements.mediaType) elements.mediaType.textContent = mediaType.toUpperCase();
         if (elements.mediaDimensions && mediaInfo) {
@@ -443,16 +400,26 @@ function updateUI(state) {
     }
 }
 
-/**
- * Inicializa el módulo de UI.
- */
 export function initializeUI() {
     queryElements();
     bindEventListeners();
 
-    // Suscribirse a eventos de cambio de estado
     events.on('state:updated', updateUI);
     events.on('config:updated', (state) => updateUI(state)); 
+
+    // ✅ NUEVO: Escuchar los resultados de las métricas y actualizar el modal
+    events.on('metrics:results', ({ psnr, ssim, compression }) => {
+        if (elements.metricPSNR) {
+            elements.metricPSNR.textContent = psnr === Infinity ? '∞ dB' : `${psnr.toFixed(2)} dB`;
+        }
+        if (elements.metricSSIM) {
+            elements.metricSSIM.textContent = ssim.toFixed(4);
+        }
+        if (elements.metricCompression) {
+            elements.metricCompression.textContent = `${compression.ratio.toFixed(2)}% (${compression.unique} colores)`;
+        }
+        showToast('Métricas actualizadas.');
+    });
 
     console.log('UI Module inicializado.');
 }
