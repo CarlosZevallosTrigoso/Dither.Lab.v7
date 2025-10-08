@@ -54,7 +54,6 @@ function startRecording() {
     }
     p5Instance.resizeCanvas(exportWidth, exportHeight);
 
-    // ✅ MEJORA DE FLUIDEZ: Sincronizar el framerate de p5.js con el de la grabación
     p5Instance.frameRate(30);
 
     if (!isPlaying) {
@@ -66,15 +65,25 @@ function startRecording() {
         console.error('Canvas no disponible.', canvas);
         showToast('Error: Canvas no disponible.');
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
-        p5Instance.frameRate(60); // Restaurar framerate si falla
+        p5Instance.frameRate(60);
         return;
     }
 
     try {
         const stream = canvas.captureStream(30);
+        
+        // ✅ CORRECCIÓN: Cambiar códec de vp9 a vp8 para mayor compatibilidad
+        const mimeType = 'video/webm;codecs=vp8';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+            showToast('Error: El códec video/webm;codecs=vp8 no es soportado por este navegador.');
+            p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
+            p5Instance.frameRate(60);
+            return;
+        }
+
         recorder = new MediaRecorder(stream, {
-            mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 12000000
+            mimeType: mimeType,
+            videoBitsPerSecond: 8000000 // Reducido un poco para vp8
         });
 
         recorder.ondataavailable = e => {
@@ -92,8 +101,6 @@ function startRecording() {
             chunks = [];
 
             p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
-            
-            // ✅ MEJORA DE FLUIDEZ: Restaurar el framerate para una vista previa fluida
             p5Instance.frameRate(60);
             
             updateState({ isRecording: false });
@@ -119,17 +126,16 @@ function startRecording() {
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
 
-        // ✅ CORRECCIÓN: Mensaje de error más claro y útil
         let errorMessage = 'Error al iniciar la grabación.';
         if (error.message && error.message.toLowerCase().includes('hardware acceleration')) {
             errorMessage = 'Error: Habilita la aceleración por hardware en tu navegador para poder grabar.';
-        } else if (error.message && error.message.toLowerCase().includes('capturestream')) {
-            errorMessage = 'Error: No se pudo capturar el stream del canvas. Intenta recargar.';
+        } else if (error.message && error.message.toLowerCase().includes('unsupported codec')) {
+            errorMessage = `Error: El códec de video no es soportado por tu navegador. (${error.message})`;
         }
-        showToast(errorMessage);
+        showToast(errorMessage, 5000);
 
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
-        p5Instance.frameRate(60); // Restaurar framerate si falla
+        p5Instance.frameRate(60);
     }
 }
 
