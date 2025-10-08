@@ -14,7 +14,6 @@ let elements = {};
 let p5Instance;
 let recorder;
 let chunks = [];
-// ✅ NUEVO: Variables para restaurar el canvas
 let originalCanvasWidth, originalCanvasHeight;
 
 function queryElements() {
@@ -35,7 +34,6 @@ function startRecording() {
         return;
     }
 
-    // ✅ RESTAURADO: Guardar dimensiones originales del canvas
     originalCanvasWidth = p5Instance.width;
     originalCanvasHeight = p5Instance.height;
 
@@ -45,7 +43,6 @@ function startRecording() {
     
     media.time(startTime);
 
-    // ✅ RESTAURADO: Lógica de redimensionamiento para alta calidad
     const maxDimension = 1080;
     let exportWidth = media.width;
     let exportHeight = media.height;
@@ -57,7 +54,9 @@ function startRecording() {
     }
     p5Instance.resizeCanvas(exportWidth, exportHeight);
 
-    // ✅ RESTAURADO: Forzar la reproducción si el video está pausado
+    // ✅ MEJORA DE FLUIDEZ: Sincronizar el framerate de p5.js con el de la grabación
+    p5Instance.frameRate(30);
+
     if (!isPlaying) {
         events.emit('playback:toggle');
     }
@@ -66,8 +65,8 @@ function startRecording() {
     if (!canvas) {
         console.error('Canvas no disponible.');
         showToast('Error: Canvas no disponible.');
-        // Restaurar canvas si falla
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
+        p5Instance.frameRate(60); // Restaurar framerate si falla
         return;
     }
 
@@ -75,7 +74,7 @@ function startRecording() {
         const stream = canvas.captureStream(30);
         recorder = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 12000000 // Bitrate alto para buena calidad
+            videoBitsPerSecond: 12000000
         });
 
         recorder.ondataavailable = e => {
@@ -92,15 +91,16 @@ function startRecording() {
             URL.revokeObjectURL(url);
             chunks = [];
 
-            // ✅ RESTAURADO: Restaurar tamaño original del canvas
             p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
+            
+            // ✅ MEJORA DE FLUIDEZ: Restaurar el framerate para una vista previa fluida
+            p5Instance.frameRate(60);
             
             updateState({ isRecording: false });
             events.emit('export:finished');
             showToast('Video WebM exportado correctamente.');
         };
 
-        // ✅ NUEVO: Lógica para detener la grabación en el marcador de salida
         let checkInterval = null;
         if (useMarkers && timeline.markerOutTime !== null) {
             checkInterval = setInterval(() => {
@@ -109,7 +109,6 @@ function startRecording() {
                 }
             }, 100);
         }
-        // Guardar la referencia al intervalo para poder limpiarlo
         recorder.checkInterval = checkInterval;
 
         recorder.start();
@@ -120,14 +119,13 @@ function startRecording() {
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
         showToast('Error al iniciar la grabación.');
-        // Restaurar canvas si falla
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
+        p5Instance.frameRate(60); // Restaurar framerate si falla
     }
 }
 
 function stopRecording() {
     if (recorder && recorder.state === 'recording') {
-        // ✅ RESTAURADO: Limpiar el intervalo de verificación
         if (recorder.checkInterval) {
             clearInterval(recorder.checkInterval);
             recorder.checkInterval = null;
@@ -139,7 +137,6 @@ function stopRecording() {
     }
 }
 
-// ... (El resto del archivo: exportGif, downloadPNG, initializeExporter, etc. se mantiene igual que en la versión anterior que te pasé)
 async function exportGif() {
     const { media, mediaType, config, timeline } = getState();
     
