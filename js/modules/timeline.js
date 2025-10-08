@@ -262,6 +262,13 @@ export function initializeTimeline() {
     events.on('state:updated', updateTimelineUI);
     events.on('timeline:updated', updateTimelineUI);
     events.on('render:frame-drawn', handlePlayback);
+
+    // ✅ CORRECCIÓN: Actualizar la UI en cada frame para que el scrubber se mueva.
+    events.on('render:frame-drawn', () => {
+        if (getState().isPlaying) {
+            updateTimelineUI(getState());
+        }
+    });
     
     events.on('media:loaded', (payload) => {
         const { mediaType, media } = payload;
@@ -290,7 +297,7 @@ export function initializeTimeline() {
         updateState({ isPlaying: newIsPlaying });
         
         if (newIsPlaying) {
-            // ✅ CORRECCIÓN CLAVE: Usar .play() para iniciar la reproducción.
+            // ✅ CORRECCIÓN: Usar media.play() en lugar de media.loop() para iniciar.
             media.play();
             events.emit('playback:play');
         } else {
