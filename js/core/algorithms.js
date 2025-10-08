@@ -109,7 +109,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
     const pix = buffer.pixels;
     applyImageAdjustments(pix, config);
 
-    // LÓGICA PORTADA DE LA VERSIÓN 6 (FUNCIONA)
     if (config.useOriginalColor) {
         const levels = config.colorCount;
         const step = 255 / (levels > 1 ? levels - 1 : 1);
@@ -156,7 +155,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             }
         }
     } else {
-        // Lógica para paleta (escala de grises o colores)
         if (config.effect === 'bayer') {
             const levels = config.colorCount;
             const baseStrength = 255 / levels;
@@ -250,9 +248,66 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
     buffer.updatePixels();
 }
 
+// ✅ CORREGIDO: Lógica completa portada de la v6
 export function drawVariableError(p, buffer, src, config, lumaLUT) {
-    // Esta es una implementación simplificada. Para una versión completa, se requeriría
-    // un análisis de gradiente más complejo como en la v6.
-    // Por ahora, se comporta como Floyd-Steinberg.
-    drawDither(p, buffer, src, config, lumaLUT, null);
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
+
+    const kernel = KERNELS['floyd-steinberg'];
+
+    // Calcular gradientes para detectar bordes
+    const gradients = new Float32Array(pw * ph);
+    for (let y = 1; y < ph - 1; y++) {
+        for (let x = 1; x < pw - 1; x++) {
+            const i = (y * pw + x) * 4;
+            const lumaCenter = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
+            const lumaRight = pix[i+4] * 0.299 + pix[i+5] * 0.587 + pix[i+6] * 0.114;
+            const lumaDown = pix[i + pw*4] * 0.299 + pix[i + pw*4 + 1] * 0.587 + pix[i + pw*4 + 2] * 0.114;
+            const gx = Math.abs(lumaRight - lumaCenter);
+            const gy = Math.abs(lumaDown - lumaCenter);
+            gradients[y * pw + x] = (gx + gy) / 255;
+        }
+    }
+      
+    for (let y = 0; y < ph; y++) {
+        for (let x = 0; x < pw; x++) {
+            const i = (y * pw + x) * 4;
+            const gradient = gradients[y * pw + x] || 0;
+            // La fuerza de difusión disminuye en zonas de alto gradiente (bordes)
+            const adaptiveStrength = config.diffusionStrength * (1 - gradient * 0.75);
+            
+            const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+            const step = 255 / (config.colorCount > 1 ? config.colorCount - 1 : 1);
+            const newLuma = Math.round(oldLuma / step) * step;
+            const [r, g, b] = lumaLUT.map(newLuma);
+            
+            pix[i] = r;
+            pix[i + 1] = g;
+            pix[i + 2] = b;
+            
+            const err = (oldLuma - newLuma) * adaptiveStrength;
+            
+            for (const pt of kernel.points) {
+                const nx = x + pt.dx;
+                const ny = y + pt.dy;
+                
+                if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
+                    const ni = (ny * pw + nx) * 4;
+                    const weight = pt.w / kernel.divisor;
+                    const adjustment = err * weight;
+                    pix[ni] = Math.min(255, Math.max(0, pix[ni] + adjustment));
+                    pix[ni + 1] = Math.min(255, Math.max(0, pix[ni + 1] + adjustment));
+                    pix[ni + 2] = Math.min(255, Math.max(0, pix[ni + 2] + adjustment));
+                }
+            }
+        }
+    }
+  
+  buffer.updatePixels();
 }
