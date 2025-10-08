@@ -3,9 +3,7 @@
  * DitherLab v7 - Módulo de Exportación
  * ============================================================================
  * - Gestiona toda la lógica para exportar el canvas en diferentes formatos:
- * WebM, GIF, PNG, secuencias PNG y hojas de sprites (Sprite Sheets).
- * - Interactúa con librerías externas (gif.js) y APIs del navegador
- * (MediaRecorder).
+ * WebM, GIF, PNG.
  * ============================================================================
  */
 import { events } from '../app/events.js';
@@ -16,6 +14,8 @@ let elements = {};
 let p5Instance;
 let recorder;
 let chunks = [];
+// ✅ NUEVO: Variables para restaurar el canvas
+let originalCanvasWidth, originalCanvasHeight;
 
 function queryElements() {
     const ids = [
@@ -29,34 +29,53 @@ function queryElements() {
 }
 
 function startRecording() {
-    const { media, mediaType, config } = getState();
+    const { media, mediaType, config, isPlaying, timeline } = getState();
     if (mediaType !== 'video') {
         showToast('Solo se puede grabar con videos cargados.');
         return;
     }
 
-    const useMarkers = elements.webmUseMarkersToggle.checked;
-    const { markerInTime } = getState().timeline;
-    const startTime = useMarkers && markerInTime !== null ? markerInTime : 0;
+    // ✅ RESTAURADO: Guardar dimensiones originales del canvas
+    originalCanvasWidth = p5Instance.width;
+    originalCanvasHeight = p5Instance.height;
 
+    const useMarkers = elements.webmUseMarkersToggle.checked;
+    const startTime = useMarkers && timeline.markerInTime !== null ? timeline.markerInTime : 0;
+    const endTime = useMarkers && timeline.markerOutTime !== null ? timeline.markerOutTime : media.duration();
+    
     media.time(startTime);
 
-    // ✅ CORREGIDO: p5Instance.canvas ya es el elemento HTML del canvas.
-    // No se necesita acceder a .elt
+    // ✅ RESTAURADO: Lógica de redimensionamiento para alta calidad
+    const maxDimension = 1080;
+    let exportWidth = media.width;
+    let exportHeight = media.height;
+    const longestSide = Math.max(exportWidth, exportHeight);
+    if (longestSide > maxDimension) {
+        const scale = maxDimension / longestSide;
+        exportWidth = Math.floor(exportWidth * scale);
+        exportHeight = Math.floor(exportHeight * scale);
+    }
+    p5Instance.resizeCanvas(exportWidth, exportHeight);
+
+    // ✅ RESTAURADO: Forzar la reproducción si el video está pausado
+    if (!isPlaying) {
+        events.emit('playback:toggle');
+    }
+
     const canvas = p5Instance.canvas;
-    
     if (!canvas) {
-        console.error('Canvas no disponible:', canvas);
+        console.error('Canvas no disponible.');
         showToast('Error: Canvas no disponible.');
+        // Restaurar canvas si falla
+        p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
         return;
     }
 
     try {
-        // ✅ CORREGIDO: Usar 'canvas' directamente
         const stream = canvas.captureStream(30);
         recorder = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp9',
-            videoBitsPerSecond: 12000000
+            videoBitsPerSecond: 12000000 // Bitrate alto para buena calidad
         });
 
         recorder.ondataavailable = e => {
@@ -72,10 +91,26 @@ function startRecording() {
             a.click();
             URL.revokeObjectURL(url);
             chunks = [];
+
+            // ✅ RESTAURADO: Restaurar tamaño original del canvas
+            p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
+            
             updateState({ isRecording: false });
             events.emit('export:finished');
             showToast('Video WebM exportado correctamente.');
         };
+
+        // ✅ NUEVO: Lógica para detener la grabación en el marcador de salida
+        let checkInterval = null;
+        if (useMarkers && timeline.markerOutTime !== null) {
+            checkInterval = setInterval(() => {
+                if (media.time() >= endTime) {
+                    stopRecording();
+                }
+            }, 100);
+        }
+        // Guardar la referencia al intervalo para poder limpiarlo
+        recorder.checkInterval = checkInterval;
 
         recorder.start();
         updateState({ isRecording: true });
@@ -85,11 +120,18 @@ function startRecording() {
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
         showToast('Error al iniciar la grabación.');
+        // Restaurar canvas si falla
+        p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
     }
 }
 
 function stopRecording() {
     if (recorder && recorder.state === 'recording') {
+        // ✅ RESTAURADO: Limpiar el intervalo de verificación
+        if (recorder.checkInterval) {
+            clearInterval(recorder.checkInterval);
+            recorder.checkInterval = null;
+        }
         recorder.stop();
         showToast('Deteniendo grabación...');
     } else {
@@ -97,6 +139,7 @@ function stopRecording() {
     }
 }
 
+// ... (El resto del archivo: exportGif, downloadPNG, initializeExporter, etc. se mantiene igual que en la versión anterior que te pasé)
 async function exportGif() {
     const { media, mediaType, config, timeline } = getState();
     
@@ -139,7 +182,6 @@ async function exportGif() {
             if (window.triggerRedraw) window.triggerRedraw();
             await new Promise(r => setTimeout(r, 50));
 
-            // ✅ CORREGIDO: Usar p5Instance.canvas directamente
             gif.addFrame(p5Instance.canvas, { copy: true, delay: 1000 / fps });
             
             const progress = ((i + 1) / totalFrames) * 100;
