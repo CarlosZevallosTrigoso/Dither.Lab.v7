@@ -26,8 +26,13 @@ async function generatePaletteFromMedia(media, colorCount, p) {
 
     if (getState().mediaType === 'video') {
         media.pause();
-        media.time(0);
-        await new Promise(r => setTimeout(r, 200)); // Esperar que el frame se actualice
+        
+        // ✅ MEJORA: Esperar de forma fiable a que el primer frame esté listo
+        await new Promise(resolve => {
+            // Cuando el video confirme que ha 'buscado' el frame 0, resolvemos la promesa
+            media.elt.onseeked = () => resolve();
+            media.time(0);
+        });
     }
     
     tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -38,7 +43,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
     }
 
-    // Algoritmo k-means++ para seleccionar centroides iniciales
+    // ... (El resto de la lógica de k-means es correcta y se mantiene igual)
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
@@ -59,7 +64,6 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         }
     }
 
-    // Iteraciones de k-means
     for (let iter = 0; iter < 10; iter++) {
         const assignments = pixels.map(px => {
             let bestCentroid = 0;
@@ -89,7 +93,6 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     
     tempCanvas.remove();
     
-    // Ordenar por luminancia y convertir a hexadecimal
     centroids.sort((a,b) => (a[0]*0.299 + a[1]*0.587 + a[2]*0.114) - (b[0]*0.299 + b[1]*0.587 + b[2]*0.114));
     return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
 }
@@ -158,7 +161,6 @@ async function handleFile(file, p) {
         const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         updateConfig({ colors: newPalette });
 
-        // ✅ CORRECCIÓN CRÍTICA: Enviar todos los datos necesarios
         events.emit('media:loaded', { 
             canvasWidth, 
             canvasHeight,
