@@ -31,40 +31,35 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     const tempCanvas = p.createGraphics(100, 100);
     tempCanvas.pixelDensity(1);
 
-    let sourceImage = media;
-
     if (getState().mediaType === 'video') {
         media.pause();
         
-        // ✅ SOLUCIÓN DEFINITIVA: Usar requestAnimationFrame para sincronizar con el ciclo de renderizado del navegador.
-        // Esto garantiza que el fotograma del video esté completamente listo antes de intentar leerlo.
+        // ✅ SOLUCIÓN DEFINITIVA: Sincronizar con el navegador y luego forzar el dibujado.
         await new Promise(resolve => {
             media.elt.onseeked = () => {
+                // Usar requestAnimationFrame para asegurar que el navegador está listo para pintar.
                 requestAnimationFrame(() => {
-                    requestAnimationFrame(() => { // Esperar dos ciclos por seguridad
-                        media.elt.onseeked = null;
-                        resolve();
-                    });
+                    media.elt.onseeked = null;
+                    resolve();
                 });
             };
             media.time(0);
         });
         
-        sourceImage = media.get();
+        // Forzar el dibujado del video en el lienzo temporal.
+        tempCanvas.image(media.elt, 0, 0, tempCanvas.width, tempCanvas.height);
+
+    } else {
+        // Para imágenes, el proceso es directo.
+        tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
     }
     
-    // Fallback por si la imagen obtenida no es válida
-    if (!sourceImage || sourceImage.width === 0 || sourceImage.height === 0) {
-        showToast("Error crítico al leer el frame del video.", 4000);
-        tempCanvas.remove();
-        return ['#000000', '#FFFFFF'];
-    }
-
-    tempCanvas.image(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
+    // Ahora leemos los píxeles del lienzo temporal, que contiene una copia estática del fotograma.
     tempCanvas.loadPixels();
     
     const pixels = [];
     for (let i = 0; i < tempCanvas.pixels.length; i += 4) {
+        // Asegurarse de que el pixel no sea transparente
         if (tempCanvas.pixels[i+3] > 128) {
             pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
         }
@@ -76,7 +71,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         return ['#000000', '#FFFFFF'];
     }
 
-    // ... (k-means logic)
+    // ... (la lógica de k-means y ordenamiento de colores permanece igual)
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
