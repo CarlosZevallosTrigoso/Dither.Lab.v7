@@ -11,6 +11,7 @@ import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError } from './algorithms.js';
+import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 
 // Creamos una instancia de la función del sketch que p5.js podrá ejecutar.
 export function sketch(p) {
@@ -23,6 +24,7 @@ export function sketch(p) {
   // Función global para forzar un redibujado desde otros módulos
   window.triggerRedraw = () => {
     needsRedraw = true;
+    p.redraw();
   };
 
   p.setup = () => {
@@ -49,8 +51,12 @@ export function sketch(p) {
         p.redraw();
     };
 
+    // ✅ AMPLIADO: Escuchar todos los eventos que requieren un redibujado
     events.on('state:updated', redrawHandler);
     events.on('config:updated', redrawHandler);
+    events.on('timeline:updated', redrawHandler);
+    events.on('curves:updated', redrawHandler);
+    events.on('presets:loaded', redrawHandler);
 
     events.on('media:loaded', (mediaState) => {
         // Ajustar el tamaño del canvas al nuevo medio
@@ -60,6 +66,31 @@ export function sketch(p) {
 
     events.on('playback:play', () => p.loop());
     events.on('playback:pause', () => p.noLoop());
+
+    // ✅ NUEVO: Escuchar la solicitud de cálculo de métricas
+    events.on('metrics:calculate', () => {
+        const { media } = getState();
+        if (!media) return;
+
+        // Crear un buffer con la imagen original sin procesar
+        const origBuffer = p.createGraphics(p.width, p.height);
+        origBuffer.pixelDensity(1);
+        origBuffer.image(media, 0, 0, p.width, p.height);
+
+        // Obtener el canvas procesado actual
+        const processedBuffer = p.get();
+
+        const psnr = calculatePSNR(origBuffer, processedBuffer);
+        const ssim = calculateSSIM(origBuffer, processedBuffer);
+        const compression = calculateCompression(processedBuffer);
+
+        // Limpiar el buffer temporal
+        origBuffer.remove();
+
+        // Emitir un evento con los resultados para que la UI los muestre
+        events.on('metrics:results', { psnr, ssim, compression });
+    });
+
 
     // Dibujar el estado inicial
     redrawHandler();
@@ -88,19 +119,16 @@ export function sketch(p) {
     // Lógica principal de renderizado
     const isDitheringActive = config.effect !== 'none';
     
-    // ✅ CORREGIDO: Construir colores p5 correctamente
     const p5colors = config.colors.map(hexColor => p.color(hexColor));
 
-    // ✅ CORREGIDO: Reconstruir LUT cuando cambian los colores
     const colorsChanged = !lumaLUT.cachedColors || 
                          lumaLUT.cachedColors.length !== p5colors.length ||
-                         config.colors.some((color, i) => {
+                         config.colors.some((hex, i) => {
                              const cached = lumaLUT.cachedColors[i];
-                             if (!cached) return true;
-                             const currentColor = p5colors[i];
-                             return p.red(cached) !== p.red(currentColor) ||
-                                    p.green(cached) !== p.green(currentColor) ||
-                                    p.blue(cached) !== p.blue(currentColor);
+                             const current = p.color(hex);
+                             return p.red(cached) !== p.red(current) ||
+                                    p.green(cached) !== p.green(current) ||
+                                    p.blue(cached) !== p.blue(current);
                          });
     
     if (colorsChanged || !lumaLUT.lut) {
