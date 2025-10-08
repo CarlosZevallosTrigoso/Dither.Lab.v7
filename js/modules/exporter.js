@@ -63,7 +63,7 @@ function startRecording() {
 
     const canvas = p5Instance.canvas;
     if (!canvas) {
-        console.error('Canvas no disponible.');
+        console.error('Canvas no disponible.', canvas);
         showToast('Error: Canvas no disponible.');
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
         p5Instance.frameRate(60); // Restaurar framerate si falla
@@ -118,7 +118,16 @@ function startRecording() {
 
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
-        showToast('Error al iniciar la grabación.');
+
+        // ✅ CORRECCIÓN: Mensaje de error más claro y útil
+        let errorMessage = 'Error al iniciar la grabación.';
+        if (error.message && error.message.toLowerCase().includes('hardware acceleration')) {
+            errorMessage = 'Error: Habilita la aceleración por hardware en tu navegador para poder grabar.';
+        } else if (error.message && error.message.toLowerCase().includes('capturestream')) {
+            errorMessage = 'Error: No se pudo capturar el stream del canvas. Intenta recargar.';
+        }
+        showToast(errorMessage);
+
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
         p5Instance.frameRate(60); // Restaurar framerate si falla
     }
