@@ -11,7 +11,10 @@ let currentFileURL = null;
 
 async function generatePaletteFromMedia(media, colorCount, p) {
     showToast('Generando paleta desde el medio...');
-    const tempCanvas = p.createGraphics(100, 100);
+    
+    // ✅ CORRECCIÓN: Forzamos un canvas 2D para la generación de paleta,
+    // esto lo hace más robusto independientemente del renderizador principal.
+    const tempCanvas = p.createGraphics(100, 100, p.P2D);
     tempCanvas.pixelDensity(1);
 
     let sourceImage = media;
@@ -42,6 +45,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
 
     if (pixels.length === 0) {
         showToast("No se pudieron leer los colores del video.", 3000);
+        tempCanvas.remove();
         return ['#000000', '#FFFFFF'];
     }
 
@@ -139,7 +143,6 @@ async function handleFile(file, p) {
             }
         });
 
-        // ✅ CORRECCIÓN FINAL: Emitir el evento con los datos necesarios
         events.emit('media:loaded', {
             media: mediaElement,
             mediaType
