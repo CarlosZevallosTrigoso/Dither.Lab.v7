@@ -36,21 +36,24 @@ function startRecording() {
     }
 
     const useMarkers = elements.webmUseMarkersToggle.checked;
-    const { markerInTime, markerOutTime } = getState().timeline;
+    const { markerInTime } = getState().timeline;
     const startTime = useMarkers && markerInTime !== null ? markerInTime : 0;
 
     media.time(startTime);
 
+    // ✅ CORREGIDO: p5Instance.canvas ya es el elemento HTML del canvas.
+    // No se necesita acceder a .elt
     const canvas = p5Instance.canvas;
     
-    if (!canvas || !canvas.elt) {
+    if (!canvas) {
         console.error('Canvas no disponible:', canvas);
         showToast('Error: Canvas no disponible.');
         return;
     }
 
     try {
-        const stream = canvas.elt.captureStream(30);
+        // ✅ CORREGIDO: Usar 'canvas' directamente
+        const stream = canvas.captureStream(30);
         recorder = new MediaRecorder(stream, {
             mimeType: 'video/webm;codecs=vp9',
             videoBitsPerSecond: 12000000
@@ -129,19 +132,16 @@ async function exportGif() {
         
         media.time(startTime);
 
-        // ✅ MEJORADO: Lógica de captura de frames portada de la v6
         for (let i = 0; i < totalFrames; i++) {
             const time = startTime + (i * frameDuration);
             media.time(time);
             
-            // Forzar el redibujado del frame actual en p5.js
             if (window.triggerRedraw) window.triggerRedraw();
-            await new Promise(r => setTimeout(r, 50)); // Pequeña espera para asegurar que el canvas se actualice
+            await new Promise(r => setTimeout(r, 50));
 
-            // Usar el método directo y eficiente de la v6
-            gif.addFrame(p5Instance.canvas.elt, { copy: true, delay: 1000 / fps });
+            // ✅ CORREGIDO: Usar p5Instance.canvas directamente
+            gif.addFrame(p5Instance.canvas, { copy: true, delay: 1000 / fps });
             
-            // Actualizar la barra de progreso
             const progress = ((i + 1) / totalFrames) * 100;
             elements.gifProgressText.textContent = `${Math.round(progress)}%`;
             elements.gifProgressBar.style.width = `${progress}%`;
