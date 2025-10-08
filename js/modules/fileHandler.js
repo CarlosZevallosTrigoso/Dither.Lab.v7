@@ -12,38 +12,38 @@ import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null;
 
-/**
- * Genera una paleta de colores usando el algoritmo k-means++ desde el medio.
- * @param {p5.MediaElement|p5.Image} media - El elemento de video o imagen.
- * @param {number} colorCount - El número de colores a extraer.
- * @param {p5} p - La instancia de p5.js.
- * @returns {Promise<string[]>} Una promesa que resuelve a un array de colores hexadecimales.
- */
 async function generatePaletteFromMedia(media, colorCount, p) {
     showToast('Generando paleta desde el medio...');
     const tempCanvas = p.createGraphics(100, 100);
     tempCanvas.pixelDensity(1);
 
+    let sourceImage = media;
+
     if (getState().mediaType === 'video') {
         media.pause();
-        
-        // ✅ MEJORA: Esperar de forma fiable a que el primer frame esté listo
-        await new Promise(resolve => {
-            // Cuando el video confirme que ha 'buscado' el frame 0, resolvemos la promesa
-            media.elt.onseeked = () => resolve();
-            media.time(0);
-        });
+        media.time(0);
+        // Esperar un momento para que el video procese el seek
+        await new Promise(r => setTimeout(r, 250)); 
+        // ✅ MEJORA CLAVE: Obtener el frame actual como una imagen estática
+        sourceImage = media.get(); 
     }
     
-    tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
+    tempCanvas.image(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
     tempCanvas.loadPixels();
     
     const pixels = [];
     for (let i = 0; i < tempCanvas.pixels.length; i += 4) {
-        pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
+        if (tempCanvas.pixels[i+3] > 128) { // Ignorar píxeles transparentes
+            pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
+        }
     }
 
-    // ... (El resto de la lógica de k-means es correcta y se mantiene igual)
+    if (pixels.length === 0) {
+        showToast("No se pudieron leer los colores del video.", 3000);
+        return ['#000000', '#FFFFFF'];
+    }
+
+    // Algoritmo k-means++ (sin cambios)
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
