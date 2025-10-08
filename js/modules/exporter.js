@@ -54,22 +54,22 @@ async function exportSpriteSheet() {
     const duration = endTime - startTime;
 
     for (let i = 0; i < frameCount; i++) {
-        const progress = i / (frameCount - 1);
+        const progress = (frameCount > 1) ? i / (frameCount - 1) : 0;
         const time = startTime + progress * duration;
         media.time(time);
         
-        // Forzar un redibujo del canvas principal y esperar a que se complete
         if (window.triggerRedraw) window.triggerRedraw();
-        await new Promise(r => setTimeout(r, 50)); // Pequeña espera para asegurar el renderizado
+        await new Promise(r => setTimeout(r, 50));
         
         const x = (i % cols) * frameW;
         const y = Math.floor(i / cols) * frameH;
         
-        spriteSheet.image(p5Instance.canvas, x, y, frameW, frameH);
+        // ✅ CORRECCIÓN: Usar p5Instance.get() para obtener una p5.Image del canvas.
+        spriteSheet.image(p5Instance.get(), x, y, frameW, frameH);
     }
     
     p5Instance.save(spriteSheet, `ditherlab_sprite_${config.effect}_${Date.now()}.png`);
-    spriteSheet.remove(); // Limpiar memoria
+    spriteSheet.remove();
     
     showToast('Sprite Sheet exportado correctamente.');
     elements.exportSpriteBtn.disabled = false;
@@ -77,7 +77,6 @@ async function exportSpriteSheet() {
     media.time(startTime);
     if (wasPlaying) events.emit('playback:toggle');
 }
-
 
 function startRecording() {
     const { media, mediaType, config, isPlaying, timeline } = getState();
@@ -294,7 +293,6 @@ export function initializeExporter(p5Inst) {
     elements.stopBtn.addEventListener('click', stopRecording);
     elements.downloadImageBtn.addEventListener('click', downloadPNG);
     elements.exportGifBtn.addEventListener('click', exportGif);
-    // ✅ CORRECCIÓN: Conectar el botón de Exportar Sprite a su nueva función.
     elements.exportSpriteBtn.addEventListener('click', exportSpriteSheet);
 
     events.on('export:start-recording', startRecording);
