@@ -2,9 +2,6 @@
  * ============================================================================
  * DitherLab v7 - Módulo de Exportación
  * ============================================================================
- * - Gestiona toda la lógica para exportar el canvas en diferentes formatos:
- * WebM, GIF, PNG.
- * ============================================================================
  */
 import { events } from '../app/events.js';
 import { getState, updateState } from '../app/state.js';
@@ -26,6 +23,61 @@ function queryElements() {
     ];
     ids.forEach(id => (elements[id] = document.getElementById(id)));
 }
+
+async function exportSpriteSheet() {
+    const { media, mediaType, config, timeline } = getState();
+    if (mediaType !== 'video') {
+        showToast('La exportación de Sprite Sheet solo funciona con videos.');
+        return;
+    }
+
+    const cols = parseInt(elements.spriteColsSlider.value);
+    const frameCount = parseInt(elements.spriteFrameCountSlider.value);
+    const frameW = p5Instance.width;
+    const frameH = p5Instance.height;
+    
+    const rows = Math.ceil(frameCount / cols);
+    const sheetW = cols * frameW;
+    const sheetH = rows * frameH;
+
+    showToast(`Generando Sprite Sheet de ${cols}x${rows}...`);
+    elements.exportSpriteBtn.disabled = true;
+
+    const wasPlaying = getState().isPlaying;
+    if (wasPlaying) events.emit('playback:toggle');
+    
+    const spriteSheet = p5Instance.createGraphics(sheetW, sheetH);
+    spriteSheet.pixelDensity(1);
+    
+    const startTime = timeline.markerInTime !== null ? timeline.markerInTime : 0;
+    const endTime = timeline.markerOutTime !== null ? timeline.markerOutTime : media.duration();
+    const duration = endTime - startTime;
+
+    for (let i = 0; i < frameCount; i++) {
+        const progress = i / (frameCount - 1);
+        const time = startTime + progress * duration;
+        media.time(time);
+        
+        // Forzar un redibujo del canvas principal y esperar a que se complete
+        if (window.triggerRedraw) window.triggerRedraw();
+        await new Promise(r => setTimeout(r, 50)); // Pequeña espera para asegurar el renderizado
+        
+        const x = (i % cols) * frameW;
+        const y = Math.floor(i / cols) * frameH;
+        
+        spriteSheet.image(p5Instance.canvas, x, y, frameW, frameH);
+    }
+    
+    p5Instance.save(spriteSheet, `ditherlab_sprite_${config.effect}_${Date.now()}.png`);
+    spriteSheet.remove(); // Limpiar memoria
+    
+    showToast('Sprite Sheet exportado correctamente.');
+    elements.exportSpriteBtn.disabled = false;
+    
+    media.time(startTime);
+    if (wasPlaying) events.emit('playback:toggle');
+}
+
 
 function startRecording() {
     const { media, mediaType, config, isPlaying, timeline } = getState();
@@ -72,7 +124,6 @@ function startRecording() {
     try {
         const stream = canvas.captureStream(30);
         
-        // ✅ CORRECCIÓN: Cambiar códec de vp9 a vp8 para mayor compatibilidad
         const mimeType = 'video/webm;codecs=vp8';
         if (!MediaRecorder.isTypeSupported(mimeType)) {
             showToast('Error: El códec video/webm;codecs=vp8 no es soportado por este navegador.');
@@ -83,7 +134,7 @@ function startRecording() {
 
         recorder = new MediaRecorder(stream, {
             mimeType: mimeType,
-            videoBitsPerSecond: 8000000 // Reducido un poco para vp8
+            videoBitsPerSecond: 8000000
         });
 
         recorder.ondataavailable = e => {
@@ -243,6 +294,8 @@ export function initializeExporter(p5Inst) {
     elements.stopBtn.addEventListener('click', stopRecording);
     elements.downloadImageBtn.addEventListener('click', downloadPNG);
     elements.exportGifBtn.addEventListener('click', exportGif);
+    // ✅ CORRECCIÓN: Conectar el botón de Exportar Sprite a su nueva función.
+    elements.exportSpriteBtn.addEventListener('click', exportSpriteSheet);
 
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
