@@ -31,7 +31,7 @@ function queryElements() {
 }
 
 /**
- * ✅ CORREGIDO: Vincula todos los eventos de la timeline a un objeto de medio específico.
+ * Vincula todos los eventos de la timeline a un objeto de medio específico.
  * @param {p5.MediaElement} media - El objeto de video de p5.js.
  */
 function bindToMedia(media) {
@@ -55,19 +55,16 @@ function bindToMedia(media) {
         const time = percent * mediaInfo.duration;
         currentMedia.time(time);
         
-        if (window.triggerRedraw) {
-            window.triggerRedraw();
-        }
+        // ✅ MEJORA: Emitir un evento en lugar de llamar a una función global
+        events.emit('timeline:updated', getState());
     };
 
-    // ✅ Event listeners para scrubbing
     elements.timeline.addEventListener('mousedown', (e) => {
         isDraggingScrubber = true;
         updateScrubPosition(e);
         e.preventDefault();
     });
 
-    // Usar window para capturar movimiento fuera de la timeline
     const handleMouseMove = (e) => {
         if (isDraggingScrubber) {
             updateScrubPosition(e);
@@ -92,23 +89,19 @@ function bindToMedia(media) {
 function updateTimelineUI(state) {
     const { media, mediaType, mediaInfo, timeline, isPlaying, playbackSpeed } = state;
 
-    // Mostrar/ocultar panel de timeline
     elements.timelinePanel.classList.toggle('hidden', mediaType !== 'video');
-    if (mediaType !== 'video' || !media) return;
+    if (mediaType !== 'video' || !media || !mediaInfo ) return;
 
     const currentTime = media.time();
     const duration = mediaInfo.duration;
     
-    // Prevenir división por cero
     const percent = (duration > 0) ? (currentTime / duration) * 100 : 0;
 
-    // Actualizar posición del scrubber y progreso
     elements.timelineScrubber.style.left = `${percent}%`;
     elements.timelineProgress.style.width = `${percent}%`;
     elements.timelineTime.textContent = formatTime(currentTime);
     elements.timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
 
-    // Actualizar marcadores
     elements.markerIn.style.display = timeline.markerInTime !== null ? 'block' : 'none';
     if (timeline.markerInTime !== null && duration > 0) {
         elements.markerIn.style.left = `${(timeline.markerInTime / duration) * 100}%`;
@@ -119,10 +112,8 @@ function updateTimelineUI(state) {
         elements.markerOut.style.left = `${(timeline.markerOutTime / duration) * 100}%`;
     }
     
-    // Actualizar botón de play/pausa
     elements.playBtn.textContent = isPlaying ? 'Pause' : 'Play';
 
-    // Actualizar indicador de velocidad
     elements.playbackSpeedVal.textContent = playbackSpeed.toFixed(2);
     elements.playbackSpeedSlider.value = playbackSpeed * 100;
     elements.speedDisplay.classList.toggle('hidden', playbackSpeed === 1);
@@ -137,7 +128,6 @@ function handlePlayback() {
     const { media, mediaType, isPlaying, timeline } = getState();
     if (mediaType !== 'video' || !media) return;
 
-    // Lógica de bucle entre marcadores
     if (isPlaying && timeline.loopSection && 
         timeline.markerInTime !== null && timeline.markerOutTime !== null) {
         const currentTime = media.time();
@@ -148,14 +138,13 @@ function handlePlayback() {
 }
 
 /**
- * ✅ Maneja navegación de frame anterior
+ * ✅ RESTAURADO: Maneja navegación de frame anterior
  */
 function handlePrevFrame() {
     if (!currentMedia) return;
     
     const { isPlaying } = getState();
     
-    // Pausar si está reproduciendo
     if (isPlaying) {
         events.emit('playback:toggle');
     }
@@ -163,20 +152,17 @@ function handlePrevFrame() {
     const newTime = Math.max(0, currentMedia.time() - 1 / 30);
     currentMedia.time(newTime);
     
-    if (window.triggerRedraw) {
-        window.triggerRedraw();
-    }
+    events.emit('timeline:updated', getState());
 }
 
 /**
- * ✅ Maneja navegación de frame siguiente
+ * ✅ RESTAURADO: Maneja navegación de frame siguiente
  */
 function handleNextFrame() {
     if (!currentMedia) return;
     
     const { isPlaying } = getState();
     
-    // Pausar si está reproduciendo
     if (isPlaying) {
         events.emit('playback:toggle');
     }
@@ -184,13 +170,11 @@ function handleNextFrame() {
     const newTime = Math.min(currentMedia.duration(), currentMedia.time() + 1 / 30);
     currentMedia.time(newTime);
     
-    if (window.triggerRedraw) {
-        window.triggerRedraw();
-    }
+    events.emit('timeline:updated', getState());
 }
 
 /**
- * ✅ Maneja establecer marcador de entrada
+ * ✅ RESTAURADO: Maneja establecer marcador de entrada
  */
 function handleSetMarkerIn() {
     if (!currentMedia) return;
@@ -200,7 +184,7 @@ function handleSetMarkerIn() {
 }
 
 /**
- * ✅ Maneja establecer marcador de salida
+ * ✅ RESTAURADO: Maneja establecer marcador de salida
  */
 function handleSetMarkerOut() {
     if (!currentMedia) return;
@@ -210,19 +194,17 @@ function handleSetMarkerOut() {
 }
 
 /**
- * ✅ Maneja reinicio del video
+ * ✅ RESTAURADO: Maneja reinicio del video
  */
 function handleRestart() {
     if (!currentMedia) return;
     currentMedia.time(0);
     showToast('Reiniciado');
-    if (window.triggerRedraw) {
-        window.triggerRedraw();
-    }
+    events.emit('timeline:updated', getState());
 }
 
 /**
- * ✅ Maneja limpieza de marcadores
+ * ✅ RESTAURADO: Maneja limpieza de marcadores
  */
 function handleClearMarkers() {
     updateTimeline({ markerInTime: null, markerOutTime: null });
@@ -230,14 +212,14 @@ function handleClearMarkers() {
 }
 
 /**
- * ✅ Maneja cambio de loop
+ * ✅ RESTAURADO: Maneja cambio de loop
  */
 function handleLoopToggle(enabled) {
     updateTimeline({ loopSection: enabled });
 }
 
 /**
- * ✅ Maneja cambio de velocidad
+ * ✅ RESTAURADO: Maneja cambio de velocidad
  */
 function handleSpeedChange(speed) {
     if (!currentMedia) return;
@@ -281,13 +263,11 @@ export function initializeTimeline() {
     events.on('timeline:updated', updateTimelineUI);
     events.on('render:frame-drawn', handlePlayback);
     
-    // ✅ CORREGIDO: Vincular al cargar medio
     events.on('media:loaded', (payload) => {
         const { mediaType, media } = payload;
         
         if (mediaType === 'video' && media) {
             bindToMedia(media);
-            // Actualizar UI inmediatamente
             setTimeout(() => updateTimelineUI(getState()), 100);
         } else {
             currentMedia = null;
@@ -295,7 +275,7 @@ export function initializeTimeline() {
         }
     });
 
-    // Eventos de navegación
+    // ✅ RESTAURADO: Eventos de navegación para atajos de teclado
     events.on('playback:prev-frame', handlePrevFrame);
     events.on('playback:next-frame', handleNextFrame);
     events.on('timeline:set-marker-in', handleSetMarkerIn);
