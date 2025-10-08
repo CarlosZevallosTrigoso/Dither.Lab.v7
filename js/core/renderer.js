@@ -49,7 +49,7 @@ export function sketch(p) {
 
   p.setup = () => {
     const { width, height } = calculateCanvasDimensions();
-    canvas = p.createCanvas(width, height);
+    canvas = p.createCanvas(width, height, p.WEBGL);
     canvas.parent('canvasContainer');
     canvas.elt.getContext('2d', { willReadFrequently: true, alpha: false });
     p.pixelDensity(1);
