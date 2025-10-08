@@ -9,12 +9,39 @@ import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null;
 
+/**
+ * Convierte un color RGB a HSL.
+ * Esto es clave para la nueva lógica de ordenamiento por luminosidad.
+ * @param {number} r - Componente Rojo (0-255)
+ * @param {number} g - Componente Verde (0-255)
+ * @param {number} b - Componente Azul (0-255)
+ * @returns {Array<number>} - Un array con [hue, saturation, lightness]
+ */
+function rgbToHsl(r, g, b) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [h, s, l];
+}
+
+
 async function generatePaletteFromMedia(media, colorCount, p) {
     showToast('Generando paleta desde el medio...');
-    
-    // ✅ CORRECCIÓN: Forzamos un canvas 2D para la generación de paleta,
-    // esto lo hace más robusto independientemente del renderizador principal.
-    const tempCanvas = p.createGraphics(100, 100, p.P2D);
+    const tempCanvas = p.createGraphics(100, 100);
     tempCanvas.pixelDensity(1);
 
     let sourceImage = media;
@@ -45,11 +72,10 @@ async function generatePaletteFromMedia(media, colorCount, p) {
 
     if (pixels.length === 0) {
         showToast("No se pudieron leer los colores del video.", 3000);
-        tempCanvas.remove();
         return ['#000000', '#FFFFFF'];
     }
 
-    // ... (k-means logic)
+    // --- Lógica K-Means para encontrar los colores dominantes ---
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
@@ -99,7 +125,25 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     
     tempCanvas.remove();
     
-    centroids.sort((a,b) => (a[0]*0.299 + a[1]*0.587 + a[2]*0.114) - (b[0]*0.299 + b[1]*0.587 + b[2]*0.114));
+    // ✅ MEJORA: Ordenar la paleta por LUMINOSIDAD (Lightness) del modelo HSL.
+    // Esto es perceptualmente más preciso que la fórmula de luminancia.
+    centroids.sort((a, b) => {
+        const hslA = rgbToHsl(a[0], a[1], a[2]);
+        const hslB = rgbToHsl(b[0], b[1], b[2]);
+        return hslA[2] - hslB[2]; // Comparamos el componente 'l' (Lightness)
+    });
+
+    // ✅ MEJORA: Asegurar que haya un negro y un blanco si el rango de tonos es amplio,
+    // para anclar mejor las sombras y las luces.
+    if (colorCount > 2) {
+        const lightnessValues = centroids.map(c => rgbToHsl(c[0], c[1], c[2])[2]);
+        const range = Math.max(...lightnessValues) - Math.min(...lightnessValues);
+        if (range > 0.7) { // Si hay un buen rango dinámico
+            centroids[0] = [0, 0, 0]; // Forzar el más oscuro a ser negro
+            centroids[centroids.length - 1] = [255, 255, 255]; // Forzar el más claro a ser blanco
+        }
+    }
+
     return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
 }
 
