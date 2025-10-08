@@ -9,9 +9,6 @@ import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null;
 
-/**
- * Función auxiliar para convertir RGB a HSL, necesaria para el ordenamiento mejorado.
- */
 function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -39,15 +36,23 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     if (getState().mediaType === 'video') {
         media.pause();
         
+        // ✅ CORRECCIÓN DEFINITIVA: Añadir una pequeña pausa DESPUÉS de 'onseeked'
+        // para dar tiempo al navegador a decodificar el fotograma antes de leerlo.
         await new Promise(resolve => {
             media.elt.onseeked = () => {
-                media.elt.onseeked = null;
-                resolve();
+                setTimeout(() => {
+                    media.elt.onseeked = null;
+                    resolve();
+                }, 100); // 100ms de espera es un valor seguro.
             };
             media.time(0);
         });
         
         sourceImage = media.get();
+        // Fallback por si media.get() falla, dibujar directamente el elemento.
+        if (!sourceImage || sourceImage.width === 0) {
+            sourceImage = media.elt;
+        }
     }
     
     tempCanvas.image(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -116,11 +121,10 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     
     tempCanvas.remove();
     
-    // ✅ CORRECCIÓN: Ordenar por luminosidad (lightness) del modelo HSL para un resultado más preciso.
     centroids.sort((a, b) => {
         const hslA = rgbToHsl(a[0], a[1], a[2]);
         const hslB = rgbToHsl(b[0], b[1], b[2]);
-        return hslA[2] - hslB[2]; // Compara el componente 'l' (lightness)
+        return hslA[2] - hslB[2];
     });
     
     return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
@@ -136,7 +140,6 @@ async function handleFile(file, p) {
         return;
     }
 
-    // ✅ CORRECCIÓN: Guardar la URL antigua y el medio para limpiarlos DESPUÉS.
     const oldMedia = getState().media;
     const oldURL = currentFileURL;
 
@@ -153,7 +156,6 @@ async function handleFile(file, p) {
             }
         });
         
-        // ✅ CORRECCIÓN: Limpiar los recursos antiguos SOLO cuando el nuevo se ha cargado.
         if (oldMedia && typeof oldMedia.remove === 'function') oldMedia.remove();
         if (oldURL) URL.revokeObjectURL(oldURL);
 
@@ -170,7 +172,6 @@ async function handleFile(file, p) {
             }
         });
 
-        // ✅ CORRECCIÓN FINAL: Emitir el evento con los datos necesarios
         events.emit('media:loaded', {
             media: mediaElement,
             mediaType
@@ -184,7 +185,6 @@ async function handleFile(file, p) {
     } catch (error) {
         console.error("Error en handleFile:", error);
         showToast('No se pudo cargar el archivo.');
-        // Si hay un error, también limpiar los recursos antiguos para evitar fugas de memoria.
         if (oldMedia && typeof oldMedia.remove === 'function') oldMedia.remove();
         if (oldURL) URL.revokeObjectURL(oldURL);
     }
