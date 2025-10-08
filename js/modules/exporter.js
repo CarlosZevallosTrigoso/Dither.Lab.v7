@@ -13,7 +13,7 @@ import { getState, updateState } from '../app/state.js';
 import { showToast } from '../utils/helpers.js';
 
 let elements = {};
-let p5Instance; // ✅ Renombrado para evitar confusión
+let p5Instance;
 let recorder;
 let chunks = [];
 
@@ -41,7 +41,6 @@ function startRecording() {
 
     media.time(startTime);
 
-    // ✅ CORREGIDO: Acceso correcto al canvas
     const canvas = p5Instance.canvas;
     
     if (!canvas || !canvas.elt) {
@@ -114,7 +113,6 @@ async function exportGif() {
     elements.gifProgress.classList.remove('hidden');
 
     try {
-        // Crear instancia de GIF.js
         const gif = new GIF({
             workers: 2,
             quality: quality,
@@ -125,44 +123,30 @@ async function exportGif() {
 
         const frameDuration = 1 / fps;
         const totalFrames = Math.floor((endTime - startTime) * fps);
-        let currentFrame = 0;
-
-        // Pausar el video y posicionarlo
+        
         const wasPlaying = getState().isPlaying;
         if (wasPlaying) events.emit('playback:toggle');
         
         media.time(startTime);
 
-        // Capturar frames
-        const captureFrame = () => {
-            return new Promise((resolve) => {
-                setTimeout(() => {
-                    // Copiar el canvas actual
-                    const canvas = p5Instance.canvas.elt;
-                    const ctx = canvas.getContext('2d');
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    
-                    gif.addFrame(imageData, { delay: (1000 / fps) });
-                    
-                    currentFrame++;
-                    const progress = (currentFrame / totalFrames) * 100;
-                    elements.gifProgressText.textContent = `${Math.round(progress)}%`;
-                    elements.gifProgressBar.style.width = `${progress}%`;
-                    
-                    resolve();
-                }, 100);
-            });
-        };
-
-        // Capturar todos los frames
+        // ✅ MEJORADO: Lógica de captura de frames portada de la v6
         for (let i = 0; i < totalFrames; i++) {
             const time = startTime + (i * frameDuration);
             media.time(time);
-            await new Promise(r => setTimeout(r, 50)); // Esperar que el frame se actualice
-            await captureFrame();
+            
+            // Forzar el redibujado del frame actual en p5.js
+            if (window.triggerRedraw) window.triggerRedraw();
+            await new Promise(r => setTimeout(r, 50)); // Pequeña espera para asegurar que el canvas se actualice
+
+            // Usar el método directo y eficiente de la v6
+            gif.addFrame(p5Instance.canvas.elt, { copy: true, delay: 1000 / fps });
+            
+            // Actualizar la barra de progreso
+            const progress = ((i + 1) / totalFrames) * 100;
+            elements.gifProgressText.textContent = `${Math.round(progress)}%`;
+            elements.gifProgressBar.style.width = `${progress}%`;
         }
 
-        // Renderizar GIF
         gif.on('finished', (blob) => {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -177,7 +161,6 @@ async function exportGif() {
             
             showToast('GIF exportado correctamente.');
             
-            // Restaurar estado
             media.time(startTime);
             if (wasPlaying) events.emit('playback:toggle');
         });
@@ -198,21 +181,15 @@ function downloadPNG() {
     showToast('Imagen PNG exportada.');
 }
 
-/**
- * Inicializa el módulo de exportación.
- * @param {p5} p5Inst - La instancia de p5.js.
- */
 export function initializeExporter(p5Inst) {
     p5Instance = p5Inst;
     queryElements();
 
-    // Listeners de botones
     elements.recBtn.addEventListener('click', startRecording);
     elements.stopBtn.addEventListener('click', stopRecording);
     elements.downloadImageBtn.addEventListener('click', downloadPNG);
     elements.exportGifBtn.addEventListener('click', exportGif);
 
-    // Listeners de eventos de la aplicación
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
     events.on('export:png', downloadPNG);
@@ -231,7 +208,6 @@ export function initializeExporter(p5Inst) {
         elements.status.textContent = 'Listo';
     });
     
-    // Desactivar botones si no hay un video cargado
     events.on('state:updated', (state) => {
         const isVideo = state.mediaType === 'video';
         elements.recBtn.disabled = !isVideo;
