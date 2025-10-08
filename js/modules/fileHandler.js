@@ -22,10 +22,8 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     if (getState().mediaType === 'video') {
         media.pause();
         media.time(0);
-        // Esperar un momento para que el video procese el seek
-        await new Promise(r => setTimeout(r, 250)); 
-        // ✅ MEJORA CLAVE: Obtener el frame actual como una imagen estática
-        sourceImage = media.get(); 
+        await new Promise(r => setTimeout(r, 250));
+        sourceImage = media.get();
     }
     
     tempCanvas.image(sourceImage, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -33,7 +31,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     
     const pixels = [];
     for (let i = 0; i < tempCanvas.pixels.length; i += 4) {
-        if (tempCanvas.pixels[i+3] > 128) { // Ignorar píxeles transparentes
+        if (tempCanvas.pixels[i+3] > 128) {
             pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
         }
     }
@@ -42,8 +40,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         showToast("No se pudieron leer los colores del video.", 3000);
         return ['#000000', '#FFFFFF'];
     }
-
-    // Algoritmo k-means++ (sin cambios)
+    
     const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
     let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
     
@@ -97,25 +94,6 @@ async function generatePaletteFromMedia(media, colorCount, p) {
     return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
 }
 
-
-function calculateCanvasDimensions(mediaWidth, mediaHeight) {
-    const container = document.getElementById('canvasContainer');
-    const padding = 32;
-    const availableWidth = container.clientWidth - padding;
-    const availableHeight = container.clientHeight - padding;
-    const mediaAspect = mediaWidth / mediaHeight;
-    const containerAspect = availableWidth / availableHeight;
-    let canvasW, canvasH;
-    if (mediaAspect > containerAspect) {
-        canvasW = availableWidth;
-        canvasH = canvasW / mediaAspect;
-    } else {
-        canvasH = availableHeight;
-        canvasW = canvasH * mediaAspect;
-    }
-    return { width: Math.max(100, Math.floor(canvasW)), height: Math.max(100, Math.floor(canvasH)) };
-}
-
 async function handleFile(file, p) {
     const fileType = file.type;
     const isVideo = fileType.startsWith('video/');
@@ -144,8 +122,6 @@ async function handleFile(file, p) {
         });
 
         if (isVideo) mediaElement.hide();
-
-        const { width: canvasWidth, height: canvasHeight } = calculateCanvasDimensions(mediaElement.width, mediaElement.height);
         
         updateState({ 
             media: mediaElement, 
@@ -158,15 +134,11 @@ async function handleFile(file, p) {
             }
         });
 
+        // ✅ La llamada a media:loaded ahora le dirá al renderer que calcule el tamaño
+        events.emit('media:loaded');
+
         const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         updateConfig({ colors: newPalette });
-
-        events.emit('media:loaded', { 
-            canvasWidth, 
-            canvasHeight,
-            media: mediaElement,
-            mediaType
-        });
         
         showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado.`);
 
