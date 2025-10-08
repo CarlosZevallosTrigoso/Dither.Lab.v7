@@ -14,7 +14,6 @@ function calculateCanvasDimensions() {
     const container = document.getElementById('canvasContainer');
     if (!container) return { width: 400, height: 225 };
 
-    // Lee el estilo CSS real del contenedor para un cálculo dinámico
     const style = window.getComputedStyle(container);
     const paddingX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
     const paddingY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
@@ -57,8 +56,13 @@ export function sketch(p) {
 
   p.setup = () => {
     const { width, height } = calculateCanvasDimensions();
-    canvas = p.createCanvas(width, height, p.WEBGL);
+    // ✅ CORRECCIÓN: Volvemos al renderizador 2D por defecto, es más estable.
+    canvas = p.createCanvas(width, height);
     canvas.parent('canvasContainer');
+    
+    // ✅ CORRECCIÓN: Eliminamos el atributo { willReadFrequently: true } que rompía la aceleración por hardware en Chrome.
+    canvas.elt.getContext('2d', { alpha: false });
+    
     p.pixelDensity(1);
     p.noSmooth();
     canvas.elt.style.imageRendering = 'pixelated';
@@ -134,11 +138,11 @@ export function sketch(p) {
 
     if (!media) {
       p.fill(128);
-      // p.textFont('monospace'); // textFont requiere cargar una fuente en WEBGL
+      p.textFont('monospace');
       p.textSize(20);
       p.textAlign(p.CENTER, p.CENTER);
-      // ✅ CORRECCIÓN: Dibujar texto en el centro (0, 0) en modo WEBGL
-      p.text('Arrastra un video o imagen\npara comenzar', 0, 0);
+      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para el texto.
+      p.text('Arrastra un video o imagen\npara comenzar', p.width / 2, p.height / 2);
       needsRedraw = false;
       return;
     }
@@ -160,14 +164,6 @@ export function sketch(p) {
         lumaLUT.build(p5colors, p);
     }
     
-    // En modo WEBGL, las texturas (imágenes) deben estar listas para usarse.
-    // p5.js maneja esto internamente para p5.Image y p5.MediaElement.
-    let sourceMedia = media;
-    if (mediaType === 'video' && media.elt.readyState < 2) {
-      // Si el video no tiene datos, no intentar dibujarlo
-      return;
-    }
-
     if (isDitheringActive) {
       const pw = Math.floor(p.width / config.ditherScale);
       const ph = Math.floor(p.height / config.ditherScale);
@@ -175,30 +171,30 @@ export function sketch(p) {
 
       switch(config.effect) {
         case 'posterize':
-          drawPosterize(p, buffer, sourceMedia, config, lumaLUT);
+          drawPosterize(p, buffer, media, config, lumaLUT);
           break;
         case 'blue-noise':
-          drawBlueNoise(p, buffer, sourceMedia, config, lumaLUT, blueNoiseLUT);
+          drawBlueNoise(p, buffer, media, config, lumaLUT, blueNoiseLUT);
           break;
         case 'variable-error':
-          drawVariableError(p, buffer, sourceMedia, config, lumaLUT);
+          drawVariableError(p, buffer, media, config, lumaLUT);
           break;
         default:
-          drawDither(p, buffer, sourceMedia, config, lumaLUT, bayerLUT);
+          drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
-      // ✅ CORRECCIÓN: Dibujar imagen desde la esquina (-w/2, -h/2) en modo WEBGL
-      p.image(buffer, -p.width / 2, -p.height / 2, p.width, p.height);
+      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para la imagen.
+      p.image(buffer, 0, 0, p.width, p.height);
 
     } else {
       const buffer = bufferPool.get(p.width, p.height, p);
-      buffer.image(sourceMedia, 0, 0, p.width, p.height);
+      buffer.image(media, 0, 0, p.width, p.height);
       
       buffer.loadPixels();
       applyImageAdjustments(buffer.pixels, config);
       buffer.updatePixels();
       
-      // ✅ CORRECCIÓN: Dibujar imagen desde la esquina (-w/2, -h/2) en modo WEBGL
-      p.image(buffer, -p.width / 2, -p.height / 2, p.width, p.height);
+      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para la imagen.
+      p.image(buffer, 0, 0, p.width, p.height);
     }
 
     events.emit('render:frame-drawn');
