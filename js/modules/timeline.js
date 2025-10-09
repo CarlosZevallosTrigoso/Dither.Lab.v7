@@ -2,11 +2,6 @@
  * ============================================================================
  * DitherLab v7 - Módulo de Timeline y Controles de Video
  * ============================================================================
- * - Gestiona toda la interactividad de la timeline, incluyendo reproducción,
- * marcadores, bucles y velocidad.
- * - Se vincula dinámicamente al medio de video cuando se carga.
- * - Se comunica con otros módulos a través de eventos.
- * ============================================================================
  */
 import { events } from '../app/events.js';
 import { getState, updateState, updateTimeline } from '../app/state.js';
@@ -55,7 +50,6 @@ function bindToMedia(media) {
         const time = percent * mediaInfo.duration;
         currentMedia.time(time);
         
-        // ✅ MEJORA: Emitir un evento en lugar de llamar a una función global
         events.emit('timeline:updated', getState());
     };
 
@@ -137,9 +131,6 @@ function handlePlayback() {
     }
 }
 
-/**
- * ✅ RESTAURADO: Maneja navegación de frame anterior
- */
 function handlePrevFrame() {
     if (!currentMedia) return;
     
@@ -155,9 +146,6 @@ function handlePrevFrame() {
     events.emit('timeline:updated', getState());
 }
 
-/**
- * ✅ RESTAURADO: Maneja navegación de frame siguiente
- */
 function handleNextFrame() {
     if (!currentMedia) return;
     
@@ -173,9 +161,6 @@ function handleNextFrame() {
     events.emit('timeline:updated', getState());
 }
 
-/**
- * ✅ RESTAURADO: Maneja establecer marcador de entrada
- */
 function handleSetMarkerIn() {
     if (!currentMedia) return;
     const time = currentMedia.time();
@@ -183,9 +168,6 @@ function handleSetMarkerIn() {
     showToast(`Entrada: ${formatTime(time)}`);
 }
 
-/**
- * ✅ RESTAURADO: Maneja establecer marcador de salida
- */
 function handleSetMarkerOut() {
     if (!currentMedia) return;
     const time = currentMedia.time();
@@ -193,9 +175,6 @@ function handleSetMarkerOut() {
     showToast(`Salida: ${formatTime(time)}`);
 }
 
-/**
- * ✅ RESTAURADO: Maneja reinicio del video
- */
 function handleRestart() {
     if (!currentMedia) return;
     currentMedia.time(0);
@@ -203,24 +182,15 @@ function handleRestart() {
     events.emit('timeline:updated', getState());
 }
 
-/**
- * ✅ RESTAURADO: Maneja limpieza de marcadores
- */
 function handleClearMarkers() {
     updateTimeline({ markerInTime: null, markerOutTime: null });
     showToast('Marcadores limpiados');
 }
 
-/**
- * ✅ RESTAURADO: Maneja cambio de loop
- */
 function handleLoopToggle(enabled) {
     updateTimeline({ loopSection: enabled });
 }
 
-/**
- * ✅ RESTAURADO: Maneja cambio de velocidad
- */
 function handleSpeedChange(speed) {
     if (!currentMedia) return;
     updateState({ playbackSpeed: speed });
@@ -233,7 +203,6 @@ function handleSpeedChange(speed) {
 export function initializeTimeline() {
     queryElements();
 
-    // --- Vincular botones a funciones ---
     elements.playBtn.addEventListener('click', () => events.emit('playback:toggle'));
     elements.restartBtn.addEventListener('click', handleRestart);
     elements.prevFrameBtn.addEventListener('click', () => events.emit('playback:prev-frame'));
@@ -243,13 +212,11 @@ export function initializeTimeline() {
     elements.clearMarkersBtn.addEventListener('click', handleClearMarkers);
     elements.loopSectionToggle.addEventListener('change', (e) => handleLoopToggle(e.target.checked));
     
-    // Control de velocidad
     elements.playbackSpeedSlider.addEventListener('input', (e) => {
         const speed = parseFloat(e.target.value) / 100;
         handleSpeedChange(speed);
     });
     
-    // Botones preset de velocidad
     document.querySelectorAll('.speed-preset').forEach(btn => {
         btn.addEventListener('click', () => {
             const speed = parseInt(btn.dataset.speed) / 100;
@@ -258,12 +225,10 @@ export function initializeTimeline() {
         });
     });
 
-    // --- Escuchar eventos ---
     events.on('state:updated', updateTimelineUI);
     events.on('timeline:updated', updateTimelineUI);
     events.on('render:frame-drawn', handlePlayback);
 
-    // ✅ CORRECCIÓN: Actualizar la UI en cada frame para que el scrubber se mueva.
     events.on('render:frame-drawn', () => {
         if (getState().isPlaying) {
             updateTimelineUI(getState());
@@ -282,22 +247,30 @@ export function initializeTimeline() {
         }
     });
 
-    // ✅ RESTAURADO: Eventos de navegación para atajos de teclado
     events.on('playback:prev-frame', handlePrevFrame);
     events.on('playback:next-frame', handleNextFrame);
     events.on('timeline:set-marker-in', handleSetMarkerIn);
     events.on('timeline:set-marker-out', handleSetMarkerOut);
 
-    // Control de reproducción
+    // --- LÓGICA DE REPRODUCCIÓN CORREGIDA ---
     events.on('playback:toggle', () => {
-        const { media, mediaType, isPlaying } = getState();
+        const { media, mediaType, isPlaying, timeline } = getState();
         if (mediaType !== 'video' || !media) return;
         
         const newIsPlaying = !isPlaying;
         updateState({ isPlaying: newIsPlaying });
         
         if (newIsPlaying) {
-            // ✅ CORRECCIÓN: Usar media.play() en lugar de media.loop() para iniciar.
+            const { markerInTime, markerOutTime, loopSection } = timeline;
+            const currentTime = media.time();
+
+            // Si el loop está activo y estamos fuera de la sección, saltar al inicio
+            if (loopSection && markerInTime !== null && markerOutTime !== null) {
+                if (currentTime < markerInTime || currentTime >= markerOutTime) {
+                    media.time(markerInTime);
+                }
+            }
+            
             media.play();
             events.emit('playback:play');
         } else {
