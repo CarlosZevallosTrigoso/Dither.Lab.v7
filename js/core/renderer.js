@@ -6,7 +6,7 @@
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError } from './algorithms.js';
+import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -179,6 +179,12 @@ export function sketch(p) {
         case 'variable-error':
           drawVariableError(p, buffer, media, config, lumaLUT);
           break;
+        case 'ostromoukhov':
+          drawOstromoukhovDither(p, buffer, media, config, lumaLUT, blueNoiseLUT);
+          break;
+        case 'riemersma':
+            drawRiemersmaDither(p, buffer, media, config, lumaLUT);
+            break;
         default:
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
