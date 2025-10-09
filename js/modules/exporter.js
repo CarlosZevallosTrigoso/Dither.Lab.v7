@@ -17,7 +17,7 @@ const WEBM_BITRATES = {
     low: 4000000,    // 4 Mbps
     medium: 8000000, // 8 Mbps
     high: 16000000,  // 16 Mbps
-    original: 20000000 // 20 Mbps para alta calidad en resolución original
+    ultra: 20000000  // 20 Mbps para alta calidad en resolución FHD/2K
 };
 
 function queryElements() {
@@ -45,6 +45,7 @@ function updateGifDimensionsEstimate() {
     
     elements.gifDimensionsEstimate.textContent = `${width}x${height} px`;
 }
+
 
 async function exportSpriteSheet() {
     const { media, mediaType, config, timeline } = getState();
@@ -125,14 +126,13 @@ function startRecording() {
     let exportWidth = media.width;
     let exportHeight = media.height;
 
-    if (selectedQuality !== 'original') {
-        const maxDimension = 1080;
-        const longestSide = Math.max(exportWidth, exportHeight);
-        if (longestSide > maxDimension) {
-            const scale = maxDimension / longestSide;
-            exportWidth = Math.floor(exportWidth * scale);
-            exportHeight = Math.floor(exportHeight * scale);
-        }
+    const maxDimension = (selectedQuality === 'ultra') ? 1920 : 1080;
+    const longestSide = Math.max(exportWidth, exportHeight);
+
+    if (longestSide > maxDimension) {
+        const scale = maxDimension / longestSide;
+        exportWidth = Math.floor(exportWidth * scale);
+        exportHeight = Math.floor(exportHeight * scale);
     }
     
     p5Instance.resizeCanvas(exportWidth, exportHeight);
