@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-t"/>
+  <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>DitherLab v7</title>
   <meta name="description" content="Procesador avanzado de dithering con una arquitectura modular y optimizada."/>
@@ -279,7 +279,10 @@
           </div>
           
           <div id="gifExportPanel" class="mb-3 pt-3 border-t border-slate-700">
-            <div class="text-xs text-gray-400 mb-2">GIF Animado</div>
+            <div class="flex justify-between items-center mb-2">
+              <div class="text-xs text-gray-400">GIF Animado</div>
+              <div class="text-xs text-yellow-300" id="gifSizeEstimate">Est. ~0 KB</div>
+            </div>
             <div class="space-y-2 mb-2">
               <label class="block">
                 <span class="text-xs">Ancho (px): <span id="gifWidthVal">480</span></span>
@@ -290,7 +293,7 @@
                 <input id="gifFpsSlider" type="range" min="5" max="30" value="10" class="w-full"/>
               </label>
               <label class="block">
-                <span class="text-xs">Calidad: <span id="gifQualityVal">10</span></span>
+                <span class="text-xs">Calidad (1=mejor): <span id="gifQualityVal">10</span></span>
                 <input id="gifQualitySlider" type="range" min="1" max="20" value="10" class="w-full"/>
               </label>
               <label class="flex items-center gap-2 cursor-pointer text-xs">
