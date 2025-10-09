@@ -13,11 +13,18 @@ let recorder;
 let chunks = [];
 let originalCanvasWidth, originalCanvasHeight;
 
+const WEBM_BITRATES = {
+    low: 4000000,    // 4 Mbps
+    medium: 8000000, // 8 Mbps
+    high: 16000000   // 16 Mbps
+};
+
 function queryElements() {
     const ids = [
         'recBtn', 'stopBtn', 'recIndicator', 'status',
         'downloadImageBtn', 'exportGifBtn', 'gifProgress', 'gifProgressText', 'gifProgressBar',
         'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle', 'webmUseMarkersToggle',
+        'gifWidthSlider', 'gifWidthVal', // Añadido para el ancho del GIF
         'exportSpriteBtn', 'spriteColsSlider', 'spriteFrameCountSlider',
         'exportSequenceBtn'
     ];
@@ -83,6 +90,13 @@ function startRecording() {
         showToast('Solo se puede grabar con videos cargados.');
         return;
     }
+    
+    const qualitySelector = document.getElementById('webmQualitySelector');
+    const selectedButton = qualitySelector.querySelector('.bg-cyan-600');
+    const selectedQuality = selectedButton ? selectedButton.dataset.quality : 'medium';
+    const bitrate = WEBM_BITRATES[selectedQuality];
+    
+    showToast(`Iniciando grabación en calidad: ${selectedQuality.charAt(0).toUpperCase() + selectedQuality.slice(1)}`);
 
     originalCanvasWidth = p5Instance.width;
     originalCanvasHeight = p5Instance.height;
@@ -132,7 +146,7 @@ function startRecording() {
 
         recorder = new MediaRecorder(stream, {
             mimeType: mimeType,
-            videoBitsPerSecond: 8000000
+            videoBitsPerSecond: bitrate
         });
 
         recorder.ondataavailable = e => {
@@ -202,12 +216,16 @@ function stopRecording() {
 }
 
 async function exportGif() {
-    const { media, mediaType, config, timeline } = getState();
+    const { media, mediaType, config, timeline, mediaInfo } = getState();
     
     if (mediaType !== 'video') {
         showToast('Solo se puede exportar GIF desde videos.');
         return;
     }
+
+    const aspectRatio = mediaInfo.height / mediaInfo.width;
+    const newWidth = parseInt(elements.gifWidthSlider.value);
+    const newHeight = Math.round(newWidth * aspectRatio);
 
     const useMarkers = elements.gifUseMarkersToggle.checked;
     const startTime = useMarkers && timeline.markerInTime !== null ? timeline.markerInTime : 0;
@@ -215,7 +233,7 @@ async function exportGif() {
     const fps = parseInt(elements.gifFpsSlider.value);
     const quality = parseInt(elements.gifQualitySlider.value);
     
-    showToast('Generando GIF... Esto puede tardar.');
+    showToast(`Generando GIF de ${newWidth}x${newHeight}... Esto puede tardar.`);
     elements.exportGifBtn.disabled = true;
     elements.gifProgress.classList.remove('hidden');
 
@@ -223,8 +241,8 @@ async function exportGif() {
         const gif = new GIF({
             workers: 2,
             quality: quality,
-            width: p5Instance.width,
-            height: p5Instance.height,
+            width: newWidth,
+            height: newHeight,
             workerScript: './js/gif.worker.js'
         });
 
@@ -236,22 +254,27 @@ async function exportGif() {
         
         media.time(startTime);
 
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = newWidth;
+        tempCanvas.height = newHeight;
+        const tempCtx = tempCanvas.getContext('2d');
+
         for (let i = 0; i < totalFrames; i++) {
             const time = startTime + (i * frameDuration);
             
-            // ✅ MEJORA: Usar una promesa con el evento 'onseeked' para asegurar la sincronización.
             await new Promise(resolve => {
                 media.elt.onseeked = () => {
-                    media.elt.onseeked = null; // Limpiar el listener para que no se dispare de nuevo
+                    media.elt.onseeked = null;
                     resolve();
                 };
                 media.time(time);
             });
             
             if (window.triggerRedraw) window.triggerRedraw();
-            await new Promise(r => setTimeout(r, 20)); // Pequeña espera adicional para el renderizado final
+            await new Promise(r => setTimeout(r, 20));
 
-            gif.addFrame(p5Instance.canvas, { copy: true, delay: 1000 / fps });
+            tempCtx.drawImage(p5Instance.canvas, 0, 0, newWidth, newHeight);
+            gif.addFrame(tempCanvas, { copy: true, delay: 1000 / fps });
             
             const progress = ((i + 1) / totalFrames) * 100;
             elements.gifProgressText.textContent = `${Math.round(progress)}%`;
@@ -301,6 +324,24 @@ export function initializeExporter(p5Inst) {
     elements.downloadImageBtn.addEventListener('click', downloadPNG);
     elements.exportGifBtn.addEventListener('click', exportGif);
     elements.exportSpriteBtn.addEventListener('click', exportSpriteSheet);
+
+    if (elements.gifWidthSlider) {
+        elements.gifWidthSlider.addEventListener('input', (e) => {
+            if(elements.gifWidthVal) elements.gifWidthVal.textContent = e.target.value;
+        });
+    }
+
+    const qualityButtons = document.querySelectorAll('.webm-quality-btn');
+    qualityButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            qualityButtons.forEach(btn => {
+                btn.classList.remove('bg-cyan-600', 'text-white');
+                btn.classList.add('bg-slate-700');
+            });
+            button.classList.add('bg-cyan-600', 'text-white');
+            button.classList.remove('bg-slate-700');
+        });
+    });
 
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
