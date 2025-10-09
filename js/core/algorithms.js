@@ -248,7 +248,6 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
     buffer.updatePixels();
 }
 
-// ✅ CORREGIDO: Lógica completa portada de la v6
 export function drawVariableError(p, buffer, src, config, lumaLUT) {
     const pw = buffer.width;
     const ph = buffer.height;
@@ -310,4 +309,155 @@ export function drawVariableError(p, buffer, src, config, lumaLUT) {
     }
   
   buffer.updatePixels();
+}
+
+export function drawOstromoukhovDither(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
+
+    const kernel = KERNELS['floyd-steinberg'];
+    const levels = config.colorCount;
+    const step = 255 / (levels > 1 ? levels - 1 : 1);
+
+    for (let y = 0; y < ph; y++) {
+        const isReversed = config.serpentineScan && y % 2 === 1;
+        const xStart = isReversed ? pw - 1 : 0;
+        const xEnd = isReversed ? -1 : pw;
+        const xStep = isReversed ? -1 : 1;
+
+        for (let x = xStart; x !== xEnd; x += xStep) {
+            const i = (y * pw + x) * 4;
+            const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+            
+            // Umbral variable con ruido azul
+            const noise = (blueNoiseLUT.get(x, y) + 0.5); // Ruido de 0 a 1
+            const variableThreshold = step / 2 * (1 + (noise - 0.5) * 0.5);
+            const newLuma = (oldLuma > variableThreshold) ? Math.ceil(oldLuma / step) * step : Math.floor(oldLuma / step) * step;
+
+            const [r, g, b] = lumaLUT.map(Math.min(255, Math.max(0, newLuma)));
+            
+            pix[i] = r;
+            pix[i + 1] = g;
+            pix[i + 2] = b;
+
+            const err = (oldLuma - newLuma) * config.diffusionStrength;
+
+            for (const pt of kernel.points) {
+                const dx = isReversed ? -pt.dx : pt.dx;
+                const nx = x + dx;
+                const ny = y + pt.dy;
+
+                if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
+                    const ni = (ny * pw + nx) * 4;
+                    const weight = pt.w / kernel.divisor;
+                    const adjustment = err * weight;
+                    pix[ni] += adjustment;
+                    pix[ni + 1] += adjustment;
+                    pix[ni + 2] += adjustment;
+                }
+            }
+        }
+    }
+    buffer.updatePixels();
+}
+
+export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
+    
+    // Convertir a escala de grises para el procesamiento
+    const gray = new Float32Array(pw * ph);
+    for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
+        gray[j] = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+    }
+
+    const curvePoints = [];
+    const n = Math.max(pw, ph);
+    const order = Math.ceil(Math.log2(n));
+
+    function hilbert(x, y, size, iter) {
+        if (iter === 0) {
+            if (x < pw && y < ph) curvePoints.push({x, y});
+            return;
+        }
+        const sub = size / 2;
+        // Rotaciones y recursión para generar la curva
+        if (x < sub && y < sub) { // Cuadrante inferior izquierdo
+            hilbert(y, x, sub, iter - 1);
+        } else if (x < sub && y >= sub) { // Cuadrante superior izquierdo
+            hilbert(x, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px, y: py + sub}));
+        } else if (x >= sub && y >= sub) { // Cuadrante superior derecho
+            hilbert(x - sub, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px + sub, y: py + sub}));
+        } else { // Cuadrante inferior derecho
+            hilbert(sub - 1 - y, size - 1 - x, sub, iter - 1, (px, py) => curvePoints.push({x: size - 1 - py, y: sub - 1 - px}));
+        }
+    }
+    
+    // Simplificación para generar la curva (una versión más sencilla y directa)
+    function d2xy(n, d) {
+        let x = 0, y = 0;
+        for (let s = 1; s < n; s *= 2) {
+            const rx = 1 & (d >> 1);
+            const ry = 1 & (d ^ rx);
+            if (ry === 0) {
+                if (rx === 1) {
+                    x = s - 1 - x;
+                    y = s - 1 - y;
+                }
+                [x, y] = [y, x];
+            }
+            x += s * rx;
+            y += s * ry;
+            d >>= 2;
+        }
+        return {x, y};
+    }
+
+    const side = Math.pow(2, Math.ceil(Math.log2(Math.max(pw, ph))));
+    const errorHistory = new Float32Array(16).fill(0);
+    
+    for (let i = 0; i < side * side; i++) {
+        const {x, y} = d2xy(side, i);
+        if (x >= pw || y >= ph) continue;
+
+        const idx = y * pw + x;
+        const originalValue = gray[idx];
+        
+        // Sumar el error ponderado de los píxeles anteriores en la curva
+        let totalError = 0;
+        totalError += errorHistory[0] * (1/2);
+        totalError += errorHistory[1] * (1/4);
+        totalError += errorHistory[3] * (1/8);
+        totalError += errorHistory[7] * (1/16);
+
+        const currentValue = originalValue + totalError * config.diffusionStrength;
+        
+        const step = 255 / (config.colorCount > 1 ? config.colorCount - 1 : 1);
+        const newValue = Math.round(currentValue / step) * step;
+        const error = currentValue - newValue;
+        
+        // Actualizar el historial de errores
+        errorHistory.copyWithin(1, 0);
+        errorHistory[0] = error;
+
+        const [r, g, b] = lumaLUT.map(newValue);
+        const pixIdx = idx * 4;
+        pix[pixIdx] = r;
+        pix[pixIdx + 1] = g;
+        pix[pixIdx + 2] = b;
+    }
+
+    buffer.updatePixels();
 }
