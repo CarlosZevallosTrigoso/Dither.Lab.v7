@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-t"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>DitherLab v7</title>
   <meta name="description" content="Procesador avanzado de dithering con una arquitectura modular y optimizada."/>
@@ -263,6 +263,12 @@
           <div class="mb-3">
             <div class="text-xs text-gray-400 mb-2">Video WebM</div>
             <div class="space-y-2 mb-2">
+              <div class="text-xs text-gray-400">Calidad:</div>
+              <div class="flex gap-2 text-xs" id="webmQualitySelector">
+                <button class="webm-quality-btn flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-quality="low">Baja</button>
+                <button class="webm-quality-btn flex-1 bg-cyan-600 px-2 py-1 rounded text-white" data-quality="medium">Media</button>
+                <button class="webm-quality-btn flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-quality="high">Alta</button>
+              </div>
               <label class="flex items-center gap-2 cursor-pointer text-xs">
                 <input id="webmUseMarkersToggle" type="checkbox" class="w-4 h-4" checked/>
                 <span>Usar marcadores</span>
@@ -275,6 +281,10 @@
           <div id="gifExportPanel" class="mb-3 pt-3 border-t border-slate-700">
             <div class="text-xs text-gray-400 mb-2">GIF Animado</div>
             <div class="space-y-2 mb-2">
+              <label class="block">
+                <span class="text-xs">Ancho (px): <span id="gifWidthVal">480</span></span>
+                <input id="gifWidthSlider" type="range" min="128" max="1024" value="480" class="w-full"/>
+              </label>
               <label class="block">
                 <span class="text-xs">FPS: <span id="gifFpsVal">10</span></span>
                 <input id="gifFpsSlider" type="range" min="5" max="30" value="10" class="w-full"/>
