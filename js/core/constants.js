@@ -54,6 +54,13 @@ export const KERNELS = {
       { dx: -1, dy: 2, w: 2 }, { dx: 0, dy: 2, w: 3 }, { dx: 1, dy: 2, w: 2 }
     ]
   },
+  'two-row-sierra': {
+    divisor: 16,
+    points: [
+        { dx: 1, dy: 0, w: 4 }, { dx: 2, dy: 0, w: 3 },
+        { dx: -2, dy: 1, w: 1 }, { dx: -1, dy: 1, w: 2 }, { dx: 0, dy: 1, w: 3 }, { dx: 1, dy: 1, w: 2 }, { dx: 2, dy: 1, w: 1 }
+    ]
+  },
   'sierra-lite': {
     divisor: 4,
     points: [
@@ -82,8 +89,11 @@ export const ALGORITHM_INFO = {
   'variable-error': "Algoritmo adaptativo que ajusta la difusión según el contenido local. Preserva mejor los bordes y detalles finos.",
   'jarvis-judice-ninke': "Difusión de error a 12 píxeles. Mayor área de difusión que Floyd-Steinberg, produce resultados muy suaves con menos artefactos.",
   'sierra': "Variante de difusión de error con 10 píxeles. Balance entre Stucki y Floyd-Steinberg. Buena calidad con rendimiento aceptable.",
+  'two-row-sierra': "Versión optimizada de Sierra que solo difunde a 7 píxeles en dos filas. Ofrece una excelente calidad visual con un rendimiento mejorado.",
   'sierra-lite': "Versión ligera de Sierra con solo 4 píxeles. Muy rápido, ideal para preview o imágenes grandes. Similar a Floyd-Steinberg pero más simple.",
-  'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes."
+  'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes.",
+  'ostromoukhov': "Difusión de error modulada con ruido azul. Varía la distribución del error para romper los patrones repetitivos, logrando un acabado muy orgánico.",
+  'riemersma': "Procesa los píxeles siguiendo una curva de Hilbert. El error se acumula y pasa de un píxel al siguiente en la curva, creando texturas únicas."
 };
 
 // Nombres para mostrar en los menús desplegables.
@@ -98,6 +108,9 @@ export const ALGORITHM_NAMES = {
   'variable-error': "Variable Error",
   'jarvis-judice-ninke': "Jarvis-Judice-Ninke",
   'sierra': "Sierra",
+  'two-row-sierra': "Two-Row Sierra",
   'sierra-lite': "Sierra Lite",
-  'burkes': "Burkes"
+  'burkes': "Burkes",
+  'ostromoukhov': "Ostromoukhov",
+  'riemersma': "Riemersma (Hilbert Curve)"
 };
