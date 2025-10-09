@@ -122,6 +122,9 @@ function startRecording() {
     
     media.time(startTime);
 
+    // =================================================================
+    // ========= INICIO DE LA LÓGICA DE REDIMENSIONAMIENTO CORREGIDA =========
+    // =================================================================
     let exportWidth = media.width;
     let exportHeight = media.height;
 
@@ -133,6 +136,9 @@ function startRecording() {
         exportWidth = Math.floor(exportWidth * scale);
         exportHeight = Math.floor(exportHeight * scale);
     }
+    // =================================================================
+    // ============ FIN DE LA LÓGICA DE REDIMENSIONAMIENTO CORREGIDA ============
+    // =================================================================
     
     p5Instance.resizeCanvas(exportWidth, exportHeight);
     p5Instance.frameRate(30);
