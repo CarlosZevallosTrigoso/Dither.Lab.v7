@@ -16,7 +16,8 @@ let originalCanvasWidth, originalCanvasHeight;
 const WEBM_BITRATES = {
     low: 4000000,    // 4 Mbps
     medium: 8000000, // 8 Mbps
-    high: 16000000   // 16 Mbps
+    high: 16000000,  // 16 Mbps
+    original: 20000000 // 20 Mbps para alta calidad en resolución original
 };
 
 function queryElements() {
@@ -24,7 +25,7 @@ function queryElements() {
         'recBtn', 'stopBtn', 'recIndicator', 'status',
         'downloadImageBtn', 'exportGifBtn', 'gifProgress', 'gifProgressText', 'gifProgressBar',
         'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle', 'webmUseMarkersToggle',
-        'gifWidthSlider', 'gifWidthVal', 'gifSizeEstimate',
+        'gifWidthSlider', 'gifWidthVal', 'gifDimensionsEstimate',
         'exportSpriteBtn', 'spriteColsSlider', 'spriteFrameCountSlider',
         'exportSequenceBtn'
     ];
@@ -34,39 +35,16 @@ function queryElements() {
     });
 }
 
-function updateGifSizeEstimate() {
-    const { media, mediaType, timeline } = getState();
-    if (mediaType !== 'video' || !elements.gifSizeEstimate) return;
+function updateGifDimensionsEstimate() {
+    const { media, mediaType } = getState();
+    if (mediaType !== 'video' || !elements.gifDimensionsEstimate) return;
 
-    const useMarkers = elements.gifUseMarkersToggle.checked;
-    const startTime = useMarkers && timeline.markerInTime !== null ? timeline.markerInTime : 0;
-    const endTime = useMarkers && timeline.markerOutTime !== null ? timeline.markerOutTime : media.duration();
-    const duration = Math.max(0, endTime - startTime);
-
+    const aspectRatio = media.height / media.width;
     const width = parseInt(elements.gifWidthSlider.value);
-    const fps = parseInt(elements.gifFpsSlider.value);
-    const quality = parseInt(elements.gifQualitySlider.value); // 1-20
+    const height = Math.round(width * aspectRatio);
     
-    const totalFrames = Math.floor(duration * fps);
-    
-    // Heurística de compresión simple: un divisor mayor implica mejor compresión
-    // La calidad de gif.js es inversa (1 es mejor), así que un valor bajo de 'quality' debe dar un divisor mayor.
-    const compressionDivisor = 3 + (20 - quality) * 0.2; // Rango de ~3 a 6.8
-    
-    const estimatedBytes = (width * width * (media.height / media.width) * totalFrames) / compressionDivisor;
-    
-    let sizeString;
-    if (estimatedBytes < 1024) {
-        sizeString = `${Math.round(estimatedBytes)} B`;
-    } else if (estimatedBytes < 1024 * 1024) {
-        sizeString = `${(estimatedBytes / 1024).toFixed(1)} KB`;
-    } else {
-        sizeString = `${(estimatedBytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
-    
-    elements.gifSizeEstimate.textContent = `Est. ~${sizeString}`;
+    elements.gifDimensionsEstimate.textContent = `${width}x${height} px`;
 }
-
 
 async function exportSpriteSheet() {
     const { media, mediaType, config, timeline } = getState();
@@ -144,17 +122,20 @@ function startRecording() {
     
     media.time(startTime);
 
-    const maxDimension = 1080;
     let exportWidth = media.width;
     let exportHeight = media.height;
-    const longestSide = Math.max(exportWidth, exportHeight);
-    if (longestSide > maxDimension) {
-        const scale = maxDimension / longestSide;
-        exportWidth = Math.floor(exportWidth * scale);
-        exportHeight = Math.floor(exportHeight * scale);
-    }
-    p5Instance.resizeCanvas(exportWidth, exportHeight);
 
+    if (selectedQuality !== 'original') {
+        const maxDimension = 1080;
+        const longestSide = Math.max(exportWidth, exportHeight);
+        if (longestSide > maxDimension) {
+            const scale = maxDimension / longestSide;
+            exportWidth = Math.floor(exportWidth * scale);
+            exportHeight = Math.floor(exportHeight * scale);
+        }
+    }
+    
+    p5Instance.resizeCanvas(exportWidth, exportHeight);
     p5Instance.frameRate(30);
 
     if (!isPlaying) {
@@ -172,10 +153,9 @@ function startRecording() {
 
     try {
         const stream = canvas.captureStream(30);
-        
         const mimeType = 'video/webm;codecs=vp8';
         if (!MediaRecorder.isTypeSupported(mimeType)) {
-            showToast('Error: El códec video/webm;codecs=vp8 no es soportado por este navegador.');
+            showToast('Error: El códec video/webm;codecs=vp8 no es soportado.', 4000);
             p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
             p5Instance.frameRate(60);
             return;
@@ -221,7 +201,6 @@ function startRecording() {
         recorder.start();
         updateState({ isRecording: true });
         events.emit('export:started');
-        // El toast de "grabando" se ha movido más arriba para incluir la calidad
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
         let errorMessage = 'Error al iniciar la grabación.';
@@ -284,7 +263,7 @@ async function exportGif() {
         const wasPlaying = getState().isPlaying;
         media.time(startTime);
         if (!wasPlaying) {
-            events.emit('playback:toggle'); // Inicia la reproducción si estaba en pausa
+            events.emit('playback:toggle');
         }
         
         const tempCanvas = document.createElement('canvas');
@@ -330,7 +309,6 @@ async function exportGif() {
             
             media.time(startTime);
             if (!wasPlaying && getState().isPlaying) {
-                // Si no estaba reproduciendo antes, lo pausamos de nuevo
                 events.emit('playback:toggle');
             }
         });
@@ -361,10 +339,9 @@ export function initializeExporter(p5Inst) {
     elements.exportGifBtn.addEventListener('click', exportGif);
     elements.exportSpriteBtn.addEventListener('click', exportSpriteSheet);
 
-    // Listeners para estimación de tamaño de GIF
     const gifEstimateTriggers = ['gifWidthSlider', 'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle'];
     gifEstimateTriggers.forEach(id => {
-        if(elements[id]) elements[id].addEventListener('input', updateGifSizeEstimate);
+        if(elements[id]) elements[id].addEventListener('input', updateGifDimensionsEstimate);
     });
     
     if (elements.gifWidthSlider) {
@@ -388,9 +365,8 @@ export function initializeExporter(p5Inst) {
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
     events.on('export:png', downloadPNG);
-    events.on('timeline:updated', updateGifSizeEstimate);
-    events.on('media:loaded', () => setTimeout(updateGifSizeEstimate, 100));
-
+    events.on('timeline:updated', updateGifDimensionsEstimate);
+    events.on('media:loaded', () => setTimeout(updateGifDimensionsEstimate, 100));
 
     events.on('export:started', () => {
         elements.recBtn.disabled = true;
