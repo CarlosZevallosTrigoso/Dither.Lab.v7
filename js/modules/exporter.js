@@ -24,12 +24,49 @@ function queryElements() {
         'recBtn', 'stopBtn', 'recIndicator', 'status',
         'downloadImageBtn', 'exportGifBtn', 'gifProgress', 'gifProgressText', 'gifProgressBar',
         'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle', 'webmUseMarkersToggle',
-        'gifWidthSlider', 'gifWidthVal', // Añadido para el ancho del GIF
+        'gifWidthSlider', 'gifWidthVal', 'gifSizeEstimate',
         'exportSpriteBtn', 'spriteColsSlider', 'spriteFrameCountSlider',
         'exportSequenceBtn'
     ];
-    ids.forEach(id => (elements[id] = document.getElementById(id)));
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) elements[id] = el;
+    });
 }
+
+function updateGifSizeEstimate() {
+    const { media, mediaType, timeline } = getState();
+    if (mediaType !== 'video' || !elements.gifSizeEstimate) return;
+
+    const useMarkers = elements.gifUseMarkersToggle.checked;
+    const startTime = useMarkers && timeline.markerInTime !== null ? timeline.markerInTime : 0;
+    const endTime = useMarkers && timeline.markerOutTime !== null ? timeline.markerOutTime : media.duration();
+    const duration = Math.max(0, endTime - startTime);
+
+    const width = parseInt(elements.gifWidthSlider.value);
+    const fps = parseInt(elements.gifFpsSlider.value);
+    const quality = parseInt(elements.gifQualitySlider.value); // 1-20
+    
+    const totalFrames = Math.floor(duration * fps);
+    
+    // Heurística de compresión simple: un divisor mayor implica mejor compresión
+    // La calidad de gif.js es inversa (1 es mejor), así que un valor bajo de 'quality' debe dar un divisor mayor.
+    const compressionDivisor = 3 + (20 - quality) * 0.2; // Rango de ~3 a 6.8
+    
+    const estimatedBytes = (width * width * (media.height / media.width) * totalFrames) / compressionDivisor;
+    
+    let sizeString;
+    if (estimatedBytes < 1024) {
+        sizeString = `${Math.round(estimatedBytes)} B`;
+    } else if (estimatedBytes < 1024 * 1024) {
+        sizeString = `${(estimatedBytes / 1024).toFixed(1)} KB`;
+    } else {
+        sizeString = `${(estimatedBytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+    
+    elements.gifSizeEstimate.textContent = `Est. ~${sizeString}`;
+}
+
 
 async function exportSpriteSheet() {
     const { media, mediaType, config, timeline } = getState();
@@ -184,19 +221,14 @@ function startRecording() {
         recorder.start();
         updateState({ isRecording: true });
         events.emit('export:started');
-        showToast('Grabando... Presiona "Detener" o tecla S.');
-
+        // El toast de "grabando" se ha movido más arriba para incluir la calidad
     } catch (error) {
         console.error('Error al iniciar grabación:', error);
-
         let errorMessage = 'Error al iniciar la grabación.';
         if (error.message && error.message.toLowerCase().includes('hardware acceleration')) {
             errorMessage = 'Error: Habilita la aceleración por hardware en tu navegador para poder grabar.';
-        } else if (error.message && error.message.toLowerCase().includes('unsupported codec')) {
-            errorMessage = `Error: El códec de video no es soportado por tu navegador. (${error.message})`;
         }
         showToast(errorMessage, 5000);
-
         p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
         p5Instance.frameRate(60);
     }
@@ -250,10 +282,11 @@ async function exportGif() {
         const totalFrames = Math.floor((endTime - startTime) * fps);
         
         const wasPlaying = getState().isPlaying;
-        if (wasPlaying) events.emit('playback:toggle');
-        
         media.time(startTime);
-
+        if (!wasPlaying) {
+            events.emit('playback:toggle'); // Inicia la reproducción si estaba en pausa
+        }
+        
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = newWidth;
         tempCanvas.height = newHeight;
@@ -296,7 +329,10 @@ async function exportGif() {
             showToast('GIF exportado correctamente.');
             
             media.time(startTime);
-            if (wasPlaying) events.emit('playback:toggle');
+            if (!wasPlaying && getState().isPlaying) {
+                // Si no estaba reproduciendo antes, lo pausamos de nuevo
+                events.emit('playback:toggle');
+            }
         });
 
         gif.render();
@@ -325,6 +361,12 @@ export function initializeExporter(p5Inst) {
     elements.exportGifBtn.addEventListener('click', exportGif);
     elements.exportSpriteBtn.addEventListener('click', exportSpriteSheet);
 
+    // Listeners para estimación de tamaño de GIF
+    const gifEstimateTriggers = ['gifWidthSlider', 'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle'];
+    gifEstimateTriggers.forEach(id => {
+        if(elements[id]) elements[id].addEventListener('input', updateGifSizeEstimate);
+    });
+    
     if (elements.gifWidthSlider) {
         elements.gifWidthSlider.addEventListener('input', (e) => {
             if(elements.gifWidthVal) elements.gifWidthVal.textContent = e.target.value;
@@ -346,6 +388,9 @@ export function initializeExporter(p5Inst) {
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
     events.on('export:png', downloadPNG);
+    events.on('timeline:updated', updateGifSizeEstimate);
+    events.on('media:loaded', () => setTimeout(updateGifSizeEstimate, 100));
+
 
     events.on('export:started', () => {
         elements.recBtn.disabled = true;
