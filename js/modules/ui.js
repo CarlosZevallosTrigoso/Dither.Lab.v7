@@ -41,7 +41,7 @@ function queryElements() {
         'metricsBtn', 'metricsModal', 'closeMetricsBtn', 'updateMetricsBtn',
         'metricPSNR', 'metricSSIM', 'metricCompression', // ✅ Añadidos IDs para métricas
         'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
-        'spriteCols', 'spriteFrameCount'
+        'spriteColsSlider', 'spriteCols', 'spriteFrameCountSlider', 'spriteFrameCount'
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -178,6 +178,23 @@ function bindEventListeners() {
         });
     }
 
+    // ========== Sliders de Exportación Sprite Sheet (CORREGIDO) ==========
+    if (elements.spriteColsSlider) {
+        elements.spriteColsSlider.addEventListener('input', (e) => {
+            if (elements.spriteCols) {
+                elements.spriteCols.textContent = e.target.value;
+            }
+        });
+    }
+
+    if (elements.spriteFrameCountSlider) {
+        elements.spriteFrameCountSlider.addEventListener('input', (e) => {
+            if (elements.spriteFrameCount) {
+                elements.spriteFrameCount.textContent = e.target.value;
+            }
+        });
+    }
+
     // ========== Modals ==========
     if (elements.shortcutsBtn) {
         elements.shortcutsBtn.addEventListener('click', () => {
@@ -211,7 +228,6 @@ function bindEventListeners() {
         });
     }
 
-    // ✅ CORREGIDO: Botón de métricas ahora emite un evento
     if (elements.updateMetricsBtn) {
         elements.updateMetricsBtn.addEventListener('click', () => {
             const state = getState();
@@ -407,7 +423,6 @@ export function initializeUI() {
     events.on('state:updated', updateUI);
     events.on('config:updated', (state) => updateUI(state)); 
 
-    // ✅ NUEVO: Escuchar los resultados de las métricas y actualizar el modal
     events.on('metrics:results', ({ psnr, ssim, compression }) => {
         if (elements.metricPSNR) {
             elements.metricPSNR.textContent = psnr === Infinity ? '∞ dB' : `${psnr.toFixed(2)} dB`;
