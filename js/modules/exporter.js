@@ -46,7 +46,6 @@ function updateGifDimensionsEstimate() {
     elements.gifDimensionsEstimate.textContent = `${width}x${height} px`;
 }
 
-
 async function exportSpriteSheet() {
     const { media, mediaType, config, timeline } = getState();
     if (mediaType !== 'video') {
