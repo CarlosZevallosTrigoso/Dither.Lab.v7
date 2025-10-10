@@ -144,3 +144,36 @@ export class BlueNoiseLUT {
     return this.noise[index] - 0.5;
   }
 }
+
+/**
+ * LUT para la matriz de umbrales del dithering en espiral.
+ */
+export class SpiralLUT {
+  constructor(size = 8) {
+    this.size = size;
+    this.matrix = new Float32Array(size * size);
+    this.generate();
+  }
+
+  generate() {
+    let x = 0, y = 0, dx = 0, dy = -1;
+    const n = this.size;
+    for (let i = 0; i < n * n; i++) {
+      const matrixX = Math.floor(x + n / 2);
+      const matrixY = Math.floor(y + n / 2);
+      if (matrixX >= 0 && matrixX < n && matrixY >= 0 && matrixY < n) {
+        this.matrix[matrixY * n + matrixX] = (i / (n * n - 1)) - 0.5;
+      }
+      if (x === y || (x < 0 && x === -y) || (x > 0 && x === 1 - y)) {
+        [dx, dy] = [-dy, dx];
+      }
+      x += dx;
+      y += dy;
+    }
+  }
+
+  get(x, y) {
+    const index = (y % this.size) * this.size + (x % this.size);
+    return this.matrix[index];
+  }
+}
