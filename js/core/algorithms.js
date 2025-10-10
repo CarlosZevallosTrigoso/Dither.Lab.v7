@@ -464,7 +464,7 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
 }
 
 // ============================================================================
-// ========= NUEVOS ALGORITMOS AÑADIDOS =======================================
+// ========= NUEVOS ALGORITMOS AÑADIDOS Y CORREGIDOS ==========================
 // ============================================================================
 
 export function drawSpiralDither(p, buffer, src, config, lumaLUT, spiralLUT) {
@@ -477,7 +477,14 @@ export function drawSpiralDither(p, buffer, src, config, lumaLUT, spiralLUT) {
 
     const levels = config.colorCount;
     const baseStrength = 255 / (levels > 1 ? levels - 1 : 1);
-    const ditherStrength = baseStrength * config.patternStrength * 2;
+    
+    // =================================================================
+    // ========= INICIO DE LA CORRECCIÓN DE `Spiral Dither` =========
+    // =================================================================
+    const ditherStrength = baseStrength * config.patternStrength * 0.8;
+    // =================================================================
+    // =========== FIN DE LA CORRECCIÓN DE `Spiral Dither` ============
+    // =================================================================
 
     for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
@@ -507,19 +514,45 @@ export function drawHalftoneDither(p, buffer, src, config) {
     buffer.background(255);
     buffer.noStroke();
     buffer.fill(0);
-
-    const cellSize = 8;
+    
+    // =================================================================
+    // ========= INICIO DE LA MEJORA DE `Halftone Dither` =========
+    // =================================================================
+    // Usamos ditherScale para el tamaño de la celda (mínimo 2 para que se vea)
+    const cellSize = Math.max(2, config.ditherScale);
     const k = cellSize / 255;
+    const tempPixels = tempBuffer.pixels;
 
     for (let y = 0; y < ph; y += cellSize) {
         for (let x = 0; x < pw; x += cellSize) {
-            const c = tempBuffer.get(x + cellSize / 2, y + cellSize / 2);
-            const luma = (p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114);
+            
+            // --- Lógica para promediar la luma de la celda ---
+            let totalLuma = 0;
+            let pixelCount = 0;
+            for (let j = 0; j < cellSize; j++) {
+                for (let i = 0; i < cellSize; i++) {
+                    const px = x + i;
+                    const py = y + j;
+                    if (px < pw && py < ph) {
+                        const pixIndex = (py * pw + px) * 4;
+                        const r = tempPixels[pixIndex];
+                        const g = tempPixels[pixIndex + 1];
+                        const b = tempPixels[pixIndex + 2];
+                        totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
+                        pixelCount++;
+                    }
+                }
+            }
+            const avgLuma = totalLuma / pixelCount;
+            // --- Fin de la nueva lógica ---
 
-            const dotSize = (255 - luma) * k;
+            const dotSize = (255 - avgLuma) * k;
             buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
         }
     }
+    // =================================================================
+    // =========== FIN DE LA MEJORA DE `Halftone Dither` ============
+    // =================================================================
     tempBuffer.remove();
 }
 
@@ -573,14 +606,29 @@ export function drawPatternDither(p, buffer, src, config) {
 
     for (let y = 0; y < ph; y += patternSize) {
         for (let x = 0; x < pw; x += patternSize) {
+            
+            // =================================================================
+            // ========= INICIO DE LA CORRECCIÓN DE `Pattern Dither` =========
+            // =================================================================
             let totalLuma = 0;
+            const tempPixels = tempBuffer.pixels;
             for (let j = 0; j < patternSize; j++) {
                 for (let i = 0; i < patternSize; i++) {
-                    const c = tempBuffer.get(x + i, y + j);
-                    totalLuma += (p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114);
+                    const px = x + i;
+                    const py = y + j;
+                    if (px < pw && py < ph) {
+                        const pixIndex = (py * pw + px) * 4;
+                        const r = tempPixels[pixIndex];
+                        const g = tempPixels[pixIndex + 1];
+                        const b = tempPixels[pixIndex + 2];
+                        totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
+                    }
                 }
             }
             const avgLuma = totalLuma / (patternSize * patternSize);
+            // =================================================================
+            // =========== FIN DE LA CORRECCIÓN DE `Pattern Dither` ============
+            // =================================================================
 
             const patternIndex = Math.min(
                 numPatterns - 1,
