@@ -80,7 +80,7 @@ async function exportSpriteSheet() {
         const time = startTime + progress * duration;
         media.time(time);
         
-        if (window.triggerRedraw) window.triggerRedraw();
+        events.emit('render:force-redraw'); // Usamos el evento en lugar de la función global
         await new Promise(r => setTimeout(r, 50));
         
         const x = (i % cols) * frameW;
@@ -287,7 +287,7 @@ async function exportGif() {
                 media.time(time);
             });
             
-            if (window.triggerRedraw) window.triggerRedraw();
+            events.emit('render:force-redraw'); // Usamos el evento en lugar de la función global
             await new Promise(r => setTimeout(r, 20));
 
             tempCtx.drawImage(p5Instance.canvas, 0, 0, newWidth, newHeight);
