@@ -48,7 +48,7 @@ export function sketch(p) {
   let lumaLUT, bayerLUT, blueNoiseLUT;
   let needsRedraw = true;
 
-  window.triggerRedraw = () => {
+  const forceRedraw = () => {
     needsRedraw = true;
     p.redraw();
   };
@@ -71,27 +71,23 @@ export function sketch(p) {
 
     p.noLoop();
 
-    const redrawHandler = () => {
-        needsRedraw = true;
-        p.redraw();
-    };
-
-    events.on('state:updated', redrawHandler);
-    events.on('config:updated', redrawHandler);
-    events.on('timeline:updated', redrawHandler);
-    events.on('curves:updated', redrawHandler);
-    events.on('presets:loaded', redrawHandler);
+    events.on('state:updated', forceRedraw);
+    events.on('config:updated', forceRedraw);
+    events.on('timeline:updated', forceRedraw);
+    events.on('curves:updated', forceRedraw);
+    events.on('presets:loaded', forceRedraw);
+    events.on('render:force-redraw', forceRedraw); // Escucha el nuevo evento
 
     events.on('media:loaded', () => {
         const { width, height } = calculateCanvasDimensions();
         p.resizeCanvas(width, height);
-        redrawHandler();
+        forceRedraw();
     });
 
     events.on('export:finished', () => {
         const { width, height } = calculateCanvasDimensions();
         p.resizeCanvas(width, height);
-        redrawHandler();
+        forceRedraw();
     });
 
     events.on('playback:play', () => p.loop());
@@ -112,7 +108,7 @@ export function sketch(p) {
         events.emit('metrics:results', { psnr, ssim, compression });
     });
 
-    redrawHandler();
+    forceRedraw();
   };
 
   p.windowResized = debounce(() => {
