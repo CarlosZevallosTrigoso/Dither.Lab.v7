@@ -40,7 +40,7 @@ const state = {
     sharpeningStrength: 0.0,  // de 0.0 a 1.0 para nitidez post-renderizado
     errorGamma: 1.0,          // de 0.5 a 2.0 para la curva del error
     patternMix: 0.5,          // de 0.0 a 1.0 para la mezcla en dithering ordenado
-    diffusionNoise: 0,        // de 0 a 10 para añadir ruido a la difusión
+    diffusionNoise: 0,        // de 0 a 20 para añadir ruido a la difusión
     // ========================================================================
 
   },
