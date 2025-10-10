@@ -39,9 +39,10 @@ function queryElements() {
         'contrastSlider', 'contrastVal', 'saturationSlider', 'saturationVal',
         'toggleCurvesBtn', 'basicImageControls', 'curvesEditor',
         'metricsBtn', 'metricsModal', 'closeMetricsBtn', 'updateMetricsBtn',
-        'metricPSNR', 'metricSSIM', 'metricCompression', // ✅ Añadidos IDs para métricas
+        'metricPSNR', 'metricSSIM', 'metricCompression',
         'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
-        'spriteColsSlider', 'spriteCols', 'spriteFrameCountSlider', 'spriteFrameCount'
+        'spriteColsSlider', 'spriteCols', 'spriteFrameCountSlider', 'spriteFrameCount',
+        'ditherScaleLabel', 'halftoneSizeLabel', 'halftoneSizeSlider', 'halftoneSizeVal' // <-- NUEVOS ELEMENTOS
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -140,6 +141,13 @@ function bindEventListeners() {
     if (elements.ditherScale) {
         elements.ditherScale.addEventListener('input', throttle((e) => {
             updateConfig({ ditherScale: parseInt(e.target.value) });
+        }, 16));
+    }
+    
+    // ==== EVENT LISTENER PARA EL NUEVO SLIDER ====
+    if (elements.halftoneSizeSlider) {
+        elements.halftoneSizeSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ halftoneSize: parseInt(e.target.value) });
         }, 16));
     }
     
@@ -359,6 +367,7 @@ function updateUI(state) {
     if (elements.saturationVal) elements.saturationVal.textContent = Math.round(config.saturation * 100);
     if (elements.colorCountVal) elements.colorCountVal.textContent = config.colorCount;
     if (elements.ditherScaleVal) elements.ditherScaleVal.textContent = config.ditherScale;
+    if (elements.halftoneSizeVal) elements.halftoneSizeVal.textContent = config.halftoneSize; // <-- ACTUALIZAR VALOR
     if (elements.diffusionStrengthVal) elements.diffusionStrengthVal.textContent = Math.round(config.diffusionStrength * 100);
     if (elements.patternStrengthVal) elements.patternStrengthVal.textContent = Math.round(config.patternStrength * 100);
 
@@ -367,6 +376,7 @@ function updateUI(state) {
     if (elements.saturationSlider) elements.saturationSlider.value = config.saturation * 100;
     if (elements.colorCountSlider) elements.colorCountSlider.value = config.colorCount;
     if (elements.ditherScale) elements.ditherScale.value = config.ditherScale;
+    if (elements.halftoneSizeSlider) elements.halftoneSizeSlider.value = config.halftoneSize; // <-- ACTUALIZAR SLIDER
     if (elements.diffusionStrengthSlider) elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
     if (elements.patternStrengthSlider) elements.patternStrengthSlider.value = config.patternStrength * 100;
 
@@ -391,13 +401,19 @@ function updateUI(state) {
 
     if (isDithering) {
         const isErrorDiffusion = KERNELS[config.effect] || config.effect === 'variable-error';
-        const isOrdered = ["bayer", "blue-noise", "spiral-dither", "halftone-dither"].includes(config.effect);
+        const isOrdered = ["bayer", "blue-noise"].includes(config.effect);
+        const isHalftone = config.effect === 'halftone-dither';
+
+        // ==== LÓGICA PARA MOSTRAR/OCULTAR SLIDERS ====
+        if(elements.ditherScaleLabel) elements.ditherScaleLabel.classList.toggle("hidden", isHalftone);
+        if(elements.halftoneSizeLabel) elements.halftoneSizeLabel.classList.toggle("hidden", !isHalftone);
         
         if (elements.errorDiffusionControls) {
             elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
         }
         if (elements.orderedDitherControls) {
-            elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
+            // Ocultamos este panel si es halftone para no confundir
+            elements.orderedDitherControls.classList.toggle("hidden", !isOrdered || isHalftone);
         }
     }
 
