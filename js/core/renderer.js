@@ -5,7 +5,7 @@
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
-import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT, SpiralLUT } from '../utils/optimizations.js';
+import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
