@@ -202,9 +202,13 @@
         
         <div id="ditherControls" class="bg-slate-800 rounded-lg p-4">
           <h3 class="font-bold text-green-300 mb-3">CONTROLES AVANZADOS</h3>
-          <label class="block mb-3">
+          <label id="ditherScaleLabel" class="block mb-3">
             <span class="text-sm">Escala: <span id="ditherScaleVal">2</span></span>
             <input id="ditherScale" type="range" min="1" max="10" value="2" class="w-full"/>
+          </label>
+          <label id="halftoneSizeLabel" class="block mb-3 hidden">
+            <span class="text-sm">Tamaño de Trama: <span id="halftoneSizeVal">10</span></span>
+            <input id="halftoneSizeSlider" type="range" min="4" max="24" value="10" class="w-full"/>
           </label>
           <div id="errorDiffusionControls" class="space-y-3 pt-3 border-t border-slate-700">
              <label class="flex items-center gap-2 cursor-pointer">
