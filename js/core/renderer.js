@@ -6,7 +6,7 @@
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither } from './algorithms.js';
+import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither, applySharpening } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -162,9 +162,6 @@ export function sketch(p) {
     }
     
     if (isDitheringActive) {
-      // ========================================================================
-      // NUEVO: Lógica para el Modo de Calidad Nativa
-      // ========================================================================
       let pw, ph;
       if (config.nativeQualityMode) {
         pw = p.width;
@@ -173,7 +170,6 @@ export function sketch(p) {
         pw = Math.floor(p.width / config.ditherScale);
         ph = Math.floor(p.height / config.ditherScale);
       }
-      // ========================================================================
       
       const buffer = bufferPool.get(pw, ph, p);
 
@@ -213,16 +209,12 @@ export function sketch(p) {
     }
 
     // ========================================================================
-    // NUEVO: Lógica para el Filtro de Nitidez (Sharpening)
+    // CORRECCIÓN: Lógica para el Filtro de Nitidez (Sharpening) manual
     // ========================================================================
     if (config.sharpeningStrength > 0) {
-      // p5.js no tiene un filtro SHARPEN con fuerza variable,
-      // así que lo aplicamos múltiples veces para simularlo.
-      // Esta es una aproximación, lo ideal sería un shader.
-      const passes = Math.ceil(config.sharpeningStrength * 3);
-      for (let i = 0; i < passes; i++) {
-        p.filter(p.SHARPEN);
-      }
+      p.loadPixels();
+      applySharpening(p.pixels, p.width, p.height, config.sharpeningStrength);
+      p.updatePixels();
     }
     // ========================================================================
 
