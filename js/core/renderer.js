@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Renderizado (p5.js)
+ * DitherLab v7 - Módulo de Renderizado (p5.js) (VERSIÓN MEJORADA)
  * ============================================================================
  */
 import { events } from '../app/events.js';
@@ -162,8 +162,19 @@ export function sketch(p) {
     }
     
     if (isDitheringActive) {
-      const pw = Math.floor(p.width / config.ditherScale);
-      const ph = Math.floor(p.height / config.ditherScale);
+      // ========================================================================
+      // NUEVO: Lógica para el Modo de Calidad Nativa
+      // ========================================================================
+      let pw, ph;
+      if (config.nativeQualityMode) {
+        pw = p.width;
+        ph = p.height;
+      } else {
+        pw = Math.floor(p.width / config.ditherScale);
+        ph = Math.floor(p.height / config.ditherScale);
+      }
+      // ========================================================================
+      
       const buffer = bufferPool.get(pw, ph, p);
 
       switch(config.effect) {
@@ -200,6 +211,20 @@ export function sketch(p) {
       
       p.image(buffer, 0, 0, p.width, p.height);
     }
+
+    // ========================================================================
+    // NUEVO: Lógica para el Filtro de Nitidez (Sharpening)
+    // ========================================================================
+    if (config.sharpeningStrength > 0) {
+      // p5.js no tiene un filtro SHARPEN con fuerza variable,
+      // así que lo aplicamos múltiples veces para simularlo.
+      // Esta es una aproximación, lo ideal sería un shader.
+      const passes = Math.ceil(config.sharpeningStrength * 3);
+      for (let i = 0; i < passes; i++) {
+        p.filter(p.SHARPEN);
+      }
+    }
+    // ========================================================================
 
     events.emit('render:frame-drawn');
 
