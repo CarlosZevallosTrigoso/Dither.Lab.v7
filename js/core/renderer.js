@@ -5,7 +5,7 @@
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
-import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
+import { BufferPool, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
 import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither, applySharpening } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
@@ -45,7 +45,6 @@ function calculateCanvasDimensions() {
 export function sketch(p) {
   let canvas;
   let bufferPool;
-  let colorCache;
   let lumaLUT, bayerLUT, blueNoiseLUT;
   let needsRedraw = true;
 
@@ -66,7 +65,6 @@ export function sketch(p) {
     canvas.elt.style.imageRendering = 'pixelated';
 
     bufferPool = new BufferPool();
-    colorCache = new ColorCache(p);
     lumaLUT = new LumaLUT();
     bayerLUT = new BayerLUT();
     blueNoiseLUT = new BlueNoiseLUT();
