@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Interfaz de Usuario (UI)
+ * DitherLab v7 - Módulo de Interfaz de Usuario (UI) (VERSIÓN MEJORADA)
  * ============================================================================
  * - Gestiona todos los elementos del DOM, sus eventos y actualizaciones visuales.
  * - Escucha las acciones del usuario y emite eventos para notificar a otros módulos.
@@ -42,7 +42,14 @@ function queryElements() {
         'metricPSNR', 'metricSSIM', 'metricCompression',
         'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
         'spriteColsSlider', 'spriteCols', 'spriteFrameCountSlider', 'spriteFrameCount',
-        'ditherScaleLabel', 'halftoneSizeLabel', 'halftoneSizeSlider', 'halftoneSizeVal' // <-- NUEVOS ELEMENTOS
+        'ditherScaleLabel', 'halftoneSizeLabel', 'halftoneSizeSlider', 'halftoneSizeVal',
+        // ========================================================================
+        // NUEVOS ELEMENTOS DE LA UI
+        // ========================================================================
+        'qualityControls', 'nativeQualityToggle', 'sharpeningSlider', 'sharpeningVal',
+        'artisticControls', 'errorGammaSlider', 'errorGammaVal', 'diffusionNoiseSlider', 'diffusionNoiseVal',
+        'patternMixSlider', 'patternMixVal', 'errorArtisticControls', 'orderedArtisticControls'
+        // ========================================================================
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -144,7 +151,6 @@ function bindEventListeners() {
         }, 16));
     }
     
-    // ==== EVENT LISTENER PARA EL NUEVO SLIDER ====
     if (elements.halftoneSizeSlider) {
         elements.halftoneSizeSlider.addEventListener('input', throttle((e) => {
             updateConfig({ halftoneSize: parseInt(e.target.value) });
@@ -168,6 +174,44 @@ function bindEventListeners() {
             updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
         }, 16));
     }
+
+    // ========================================================================
+    // EVENT LISTENERS PARA NUEVOS CONTROLES
+    // ========================================================================
+
+    // --- Panel de Calidad ---
+    if (elements.nativeQualityToggle) {
+        elements.nativeQualityToggle.addEventListener('change', (e) => {
+            updateConfig({ nativeQualityMode: e.target.checked });
+        });
+    }
+
+    if (elements.sharpeningSlider) {
+        elements.sharpeningSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ sharpeningStrength: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
+
+    // --- Panel de Controles Artísticos ---
+    if (elements.errorGammaSlider) {
+        elements.errorGammaSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ errorGamma: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
+
+    if (elements.diffusionNoiseSlider) {
+        elements.diffusionNoiseSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ diffusionNoise: parseInt(e.target.value) });
+        }, 16));
+    }
+    
+    if (elements.patternMixSlider) {
+        elements.patternMixSlider.addEventListener('input', throttle((e) => {
+            updateConfig({ patternMix: parseInt(e.target.value) / 100 });
+        }, 16));
+    }
+
+    // ========================================================================
 
     // ========== Sliders de Exportación GIF ==========
     if (elements.gifFpsSlider) {
@@ -362,12 +406,13 @@ function updateUI(state) {
     if (!state || !state.config) return;
     const { config, mediaType, mediaInfo } = state;
 
+    // Actualizar valores de sliders y toggles existentes
     if (elements.brightnessVal) elements.brightnessVal.textContent = config.brightness;
     if (elements.contrastVal) elements.contrastVal.textContent = Math.round(config.contrast * 100);
     if (elements.saturationVal) elements.saturationVal.textContent = Math.round(config.saturation * 100);
     if (elements.colorCountVal) elements.colorCountVal.textContent = config.colorCount;
     if (elements.ditherScaleVal) elements.ditherScaleVal.textContent = config.ditherScale;
-    if (elements.halftoneSizeVal) elements.halftoneSizeVal.textContent = config.halftoneSize; // <-- ACTUALIZAR VALOR
+    if (elements.halftoneSizeVal) elements.halftoneSizeVal.textContent = config.halftoneSize;
     if (elements.diffusionStrengthVal) elements.diffusionStrengthVal.textContent = Math.round(config.diffusionStrength * 100);
     if (elements.patternStrengthVal) elements.patternStrengthVal.textContent = Math.round(config.patternStrength * 100);
 
@@ -376,7 +421,7 @@ function updateUI(state) {
     if (elements.saturationSlider) elements.saturationSlider.value = config.saturation * 100;
     if (elements.colorCountSlider) elements.colorCountSlider.value = config.colorCount;
     if (elements.ditherScale) elements.ditherScale.value = config.ditherScale;
-    if (elements.halftoneSizeSlider) elements.halftoneSizeSlider.value = config.halftoneSize; // <-- ACTUALIZAR SLIDER
+    if (elements.halftoneSizeSlider) elements.halftoneSizeSlider.value = config.halftoneSize;
     if (elements.diffusionStrengthSlider) elements.diffusionStrengthSlider.value = config.diffusionStrength * 100;
     if (elements.patternStrengthSlider) elements.patternStrengthSlider.value = config.patternStrength * 100;
 
@@ -384,7 +429,27 @@ function updateUI(state) {
     if (elements.serpentineToggle) elements.serpentineToggle.checked = config.serpentineScan;
     if (elements.monochromeToggle) elements.monochromeToggle.checked = config.isMonochrome;
     if (elements.originalColorToggle) elements.originalColorToggle.checked = config.useOriginalColor;
-
+    
+    // ========================================================================
+    // ACTUALIZAR UI PARA NUEVOS CONTROLES
+    // ========================================================================
+    if (elements.sharpeningVal) elements.sharpeningVal.textContent = Math.round(config.sharpeningStrength * 100);
+    if (elements.sharpeningSlider) elements.sharpeningSlider.value = config.sharpeningStrength * 100;
+    if (elements.nativeQualityToggle) elements.nativeQualityToggle.checked = config.nativeQualityMode;
+    
+    if (elements.errorGammaVal) elements.errorGammaVal.textContent = config.errorGamma.toFixed(2);
+    if (elements.errorGammaSlider) elements.errorGammaSlider.value = config.errorGamma * 100;
+    
+    if (elements.diffusionNoiseVal) elements.diffusionNoiseVal.textContent = config.diffusionNoise;
+    if (elements.diffusionNoiseSlider) elements.diffusionNoiseSlider.value = config.diffusionNoise;
+    
+    if (elements.patternMixVal) elements.patternMixVal.textContent = Math.round(config.patternMix * 100);
+    if (elements.patternMixSlider) elements.patternMixSlider.value = config.patternMix * 100;
+    
+    // Deshabilitar escala si el modo de calidad nativa está activo
+    if (elements.ditherScale) elements.ditherScale.disabled = config.nativeQualityMode;
+    // ========================================================================
+    
     updateColorInputs();
 
     if (elements.infoText) {
@@ -395,26 +460,24 @@ function updateUI(state) {
     }
 
     const isDithering = config.effect !== "none" && config.effect !== "posterize";
-    if (elements.ditherControls) {
-        elements.ditherControls.classList.toggle("hidden", !isDithering);
-    }
+    if (elements.ditherControls) elements.ditherControls.classList.toggle("hidden", !isDithering);
+    if (elements.qualityControls) elements.qualityControls.classList.toggle("hidden", !isDithering);
+    if (elements.artisticControls) elements.artisticControls.classList.toggle("hidden", !isDithering);
 
     if (isDithering) {
-        const isErrorDiffusion = KERNELS[config.effect] || config.effect === 'variable-error';
+        const isErrorDiffusion = KERNELS[config.effect] || ['variable-error', 'ostromoukhov'].includes(config.effect);
         const isOrdered = ["bayer", "blue-noise"].includes(config.effect);
         const isHalftone = config.effect === 'halftone-dither';
 
-        // ==== LÓGICA PARA MOSTRAR/OCULTAR SLIDERS ====
         if(elements.ditherScaleLabel) elements.ditherScaleLabel.classList.toggle("hidden", isHalftone);
         if(elements.halftoneSizeLabel) elements.halftoneSizeLabel.classList.toggle("hidden", !isHalftone);
         
-        if (elements.errorDiffusionControls) {
-            elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
-        }
-        if (elements.orderedDitherControls) {
-            // Ocultamos este panel si es halftone para no confundir
-            elements.orderedDitherControls.classList.toggle("hidden", !isOrdered || isHalftone);
-        }
+        if (elements.errorDiffusionControls) elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
+        if (elements.orderedDitherControls) elements.orderedDitherControls.classList.toggle("hidden", !isOrdered || isHalftone);
+
+        // NUEVO: Mostrar controles artísticos específicos según el tipo de algoritmo
+        if (elements.errorArtisticControls) elements.errorArtisticControls.classList.toggle("hidden", !isErrorDiffusion);
+        if (elements.orderedArtisticControls) elements.orderedArtisticControls.classList.toggle("hidden", !isOrdered);
     }
 
     if (mediaType) {
