@@ -93,7 +93,11 @@ export const ALGORITHM_INFO = {
   'sierra-lite': "Versión ligera de Sierra con solo 4 píxeles. Muy rápido, ideal para preview o imágenes grandes. Similar a Floyd-Steinberg pero más simple.",
   'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes.",
   'ostromoukhov': "Difusión de error modulada con ruido azul. Varía la distribución del error para romper los patrones repetitivos, logrando un acabado muy orgánico.",
-  'riemersma': "Procesa los píxeles siguiendo una curva de Hilbert. El error se acumula y pasa de un píxel al siguiente en la curva, creando texturas únicas."
+  'riemersma': "Procesa los píxeles siguiendo una curva de Hilbert. El error se acumula y pasa de un píxel al siguiente en la curva, creando texturas únicas.",
+  'spiral-dither': 'Dithering ordenado que usa una matriz en espiral para crear texturas fluidas y orgánicas, similares a los surcos de un vinilo.',
+  'halftone-dither': 'Simula la técnica de impresión de semitonos usando puntos de tamaño variable para representar tonos. Ideal para un look de cómic o periódico.',
+  'pattern-dither': 'Utiliza patrones de mapa de bits predefinidos para representar los niveles de luminancia, permitiendo un control artístico total sobre la textura.',
+  'dot-spacing-dither': 'Algoritmo experimental que varía la distancia entre puntos de tamaño fijo para crear la ilusión de tono, similar a un grabado.'
 };
 
 // Nombres para mostrar en los menús desplegables.
@@ -112,5 +116,9 @@ export const ALGORITHM_NAMES = {
   'sierra-lite': "Sierra Lite",
   'burkes': "Burkes",
   'ostromoukhov': "Ostromoukhov",
-  'riemersma': "Riemersma (Hilbert Curve)"
+  'riemersma': "Riemersma (Hilbert Curve)",
+  'spiral-dither': "Spiral Dither",
+  'halftone-dither': "Halftone Dither",
+  'pattern-dither': "Pattern Dither",
+  'dot-spacing-dither': "Dot Spacing Dither"
 };
