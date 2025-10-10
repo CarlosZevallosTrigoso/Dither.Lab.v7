@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Algoritmos de Dithering
+ * DitherLab v7 - Algoritmos de Dithering (VERSIÓN MEJORADA)
  * ============================================================================
  * - Contiene la lógica central para el procesamiento de píxeles.
  * - Incluye la aplicación de ajustes de imagen y las implementaciones
@@ -111,6 +111,7 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
     applyImageAdjustments(pix, config);
 
     if (config.useOriginalColor) {
+        // Lógica para dithering a color original
         const levels = config.colorCount;
         const step = 255 / (levels > 1 ? levels - 1 : 1);
         const kernel = KERNELS[config.effect];
@@ -136,9 +137,16 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                 pix[i + 1] = newG;
                 pix[i + 2] = newB;
 
-                const errR = (oldR - newR) * config.diffusionStrength;
-                const errG = (oldG - newG) * config.diffusionStrength;
-                const errB = (oldB - newB) * config.diffusionStrength;
+                let errR = oldR - newR;
+                let errG = oldG - newG;
+                let errB = oldB - newB;
+                
+                // NUEVO: Aplicar Gamma de Error y Fuerza de Difusión
+                const strength = config.diffusionStrength;
+                const gamma = config.errorGamma;
+                errR = Math.pow(Math.abs(errR / 255), gamma) * 255 * Math.sign(errR) * strength;
+                errG = Math.pow(Math.abs(errG / 255), gamma) * 255 * Math.sign(errG) * strength;
+                errB = Math.pow(Math.abs(errB / 255), gamma) * 255 * Math.sign(errB) * strength;
 
                 for (const pt of kernel.points) {
                     const dx = isReversed ? -pt.dx : pt.dx;
@@ -156,6 +164,7 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             }
         }
     } else {
+        // Lógica para dithering a paleta (monocromo o color)
         if (config.effect === 'bayer') {
             const levels = config.colorCount;
             const baseStrength = 255 / levels;
@@ -164,10 +173,14 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             for (let y = 0; y < ph; y++) {
                 for (let x = 0; x < pw; x++) {
                     const i = (y * pw + x) * 4;
-                    const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
                     const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-                    const adjustedLuma = luma + ditherOffset;
-                    const [r, g, b] = lumaLUT.map(adjustedLuma);
+                    const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
+
+                    // NUEVO: Mezcla de Patrón
+                    const mixRatio = config.patternMix;
+                    const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
+                    
+                    const [r, g, b] = lumaLUT.map(mixedLuma);
                     pix[i] = r;
                     pix[i + 1] = g;
                     pix[i + 2] = b;
@@ -176,10 +189,16 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
         } else {
             const kernel = KERNELS[config.effect];
             if (!kernel) return;
+            
+            // NUEVO: Buffer de Luminancia para optimización
+            const lumaBuffer = new Float32Array(pw * ph);
+            for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
+                lumaBuffer[j] = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
+            }
 
             const levels = config.colorCount;
             const step = 255 / (levels > 1 ? levels - 1 : 1);
-
+            
             for (let y = 0; y < ph; y++) {
                 const isReversed = config.serpentineScan && y % 2 === 1;
                 const xStart = isReversed ? pw - 1 : 0;
@@ -187,16 +206,26 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                 const xStep = isReversed ? -1 : 1;
 
                 for (let x = xStart; x !== xEnd; x += xStep) {
-                    const i = (y * pw + x) * 4;
-                    const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+                    const lumaIndex = y * pw + x;
+                    const pixIndex = lumaIndex * 4;
+                    
+                    // NUEVO: Añadir ruido y leer del buffer de luminancia
+                    const noise = (Math.random() * 2 - 1) * config.diffusionNoise;
+                    const oldLuma = lumaBuffer[lumaIndex] + noise;
+                    
                     const newLuma = Math.round(oldLuma / step) * step;
                     const [r, g, b] = lumaLUT.map(newLuma);
 
-                    pix[i] = r;
-                    pix[i + 1] = g;
-                    pix[i + 2] = b;
+                    pix[pixIndex] = r;
+                    pix[pixIndex + 1] = g;
+                    pix[pixIndex + 2] = b;
 
-                    const err = (oldLuma - newLuma) * config.diffusionStrength;
+                    let err = oldLuma - newLuma;
+                    
+                    // NUEVO: Aplicar Gamma de Error y Fuerza de Difusión
+                    const strength = config.diffusionStrength;
+                    const gamma = config.errorGamma;
+                    const finalError = Math.pow(Math.abs(err / 255), gamma) * 255 * Math.sign(err) * strength;
 
                     for (const pt of kernel.points) {
                         const dx = isReversed ? -pt.dx : pt.dx;
@@ -204,12 +233,9 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                         const ny = y + pt.dy;
 
                         if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
-                            const ni = (ny * pw + nx) * 4;
+                            const neighborIndex = ny * pw + nx;
                             const weight = pt.w / kernel.divisor;
-                            const adjustment = err * weight;
-                            pix[ni] += adjustment;
-                            pix[ni + 1] += adjustment;
-                            pix[ni + 2] += adjustment;
+                            lumaBuffer[neighborIndex] += finalError * weight;
                         }
                     }
                 }
@@ -237,10 +263,14 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
     for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
             const i = (y * pw + x) * 4;
-            const ditherOffset = blueNoiseLUT.get(x, y) * ditherStrength;
             const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-            const adjustedLuma = luma + ditherOffset;
-            const [r, g, b] = lumaLUT.map(adjustedLuma);
+            const ditherOffset = blueNoiseLUT.get(x, y) * ditherStrength;
+
+            // NUEVO: Mezcla de Patrón
+            const mixRatio = config.patternMix;
+            const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
+
+            const [r, g, b] = lumaLUT.map(mixedLuma);
             pix[i] = r;
             pix[i + 1] = g;
             pix[i + 2] = b;
@@ -248,6 +278,10 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
     }
     buffer.updatePixels();
 }
+
+// Las implementaciones de drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, y drawHalftoneDither
+// se mantienen igual, ya que las nuevas lógicas son más aplicables a los algoritmos básicos de difusión y ordenado.
+// Si se desea, se podrían adaptar estas nuevas lógicas a ellos también.
 
 export function drawVariableError(p, buffer, src, config, lumaLUT) {
     const pw = buffer.width;
@@ -451,7 +485,6 @@ export function drawHalftoneDither(p, buffer, src, config) {
     buffer.noStroke();
     buffer.fill(0);
 
-    // Usamos el nuevo parámetro 'halftoneSize' en lugar de 'ditherScale'
     const cellSize = config.halftoneSize;
     const k = cellSize / 255;
     const tempPixels = tempBuffer.pixels;
