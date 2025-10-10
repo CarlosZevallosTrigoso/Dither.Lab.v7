@@ -196,7 +196,13 @@ export function sketch(p) {
             drawPatternDither(p, buffer, media, config, lumaLUT);
             break;
         case 'dot-spacing-dither':
-            drawDotSpacingDither(p, buffer, media, config, lumaLUT);
+            // =================================================================
+            // ========= INICIO DE LA CORRECCIÓN DEL ERROR =========
+            // =================================================================
+            drawDotSpacingDither(p, buffer, media, config, lumaLUT, blueNoiseLUT);
+            // =================================================================
+            // ============ FIN DE LA CORRECCIÓN DEL ERROR ============
+            // =================================================================
             break;
         default:
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
