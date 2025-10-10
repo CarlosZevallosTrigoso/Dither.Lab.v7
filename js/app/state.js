@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Estado
+ * DitherLab v7 - Módulo de Estado (VERSIÓN MEJORADA)
  * ============================================================================
  * - Gestiona el estado global de la aplicación de forma centralizada.
  * - Es la ÚNICA FUENTE DE VERDAD. Ningún módulo debe modificar el estado
@@ -31,7 +31,18 @@ const state = {
     contrast: 1.0,
     saturation: 1.0,
     curvesLUTs: null,
-    halftoneSize: 10 // <-- NUEVO PARÁMETRO CON UN VALOR INICIAL
+    halftoneSize: 10,
+    
+    // ========================================================================
+    // NUEVOS PARÁMETROS DE CONFIGURACIÓN
+    // ========================================================================
+    nativeQualityMode: false, // true para procesar a resolución completa
+    sharpeningStrength: 0.0,  // de 0.0 a 1.0 para nitidez post-renderizado
+    errorGamma: 1.0,          // de 0.5 a 2.0 para la curva del error
+    patternMix: 0.5,          // de 0.0 a 1.0 para la mezcla en dithering ordenado
+    diffusionNoise: 0,        // de 0 a 10 para añadir ruido a la difusión
+    // ========================================================================
+
   },
   curves: {
     rgb: [{x: 0, y: 0}, {x: 255, y: 255}],
