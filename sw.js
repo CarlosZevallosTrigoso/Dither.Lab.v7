@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Service Worker
+ * DitherLab v7 - Service Worker (VERSIÓN CORREGIDA)
  * ============================================================================
  * - Se ejecuta en segundo plano para gestionar el caché y las peticiones de red.
  * - Permite que la aplicación funcione offline sirviendo los archivos cacheados.
@@ -10,12 +10,15 @@
 
 const CACHE_NAME = 'ditherlab-v7-cache-20251008'; // Versión actualizada
 
-// ✅ SEPARADO: URLs locales y de terceros
+// ✅ CORREGIDO: Se añaden las rutas relativas a los íconos.
 const localUrlsToCache = [
   './',
   './index.html',
   './css/styles.css',
   './manifest.json',
+  './icons/icon-192x192.png',
+  './icons/icon-512x512.png',
+  './icons/icon-maskable-512x512.png',
   './js/app/main.js',
   './js/app/pwa.js',
   './js/app/events.js',
