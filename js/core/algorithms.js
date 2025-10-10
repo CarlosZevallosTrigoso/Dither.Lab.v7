@@ -461,3 +461,93 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
 
     buffer.updatePixels();
 }
+
+// ============================================================================
+// ========= NUEVOS ALGORITMOS AÑADIDOS =======================================
+// ============================================================================
+
+export function drawSpiralDither(p, buffer, src, config, lumaLUT, spiralLUT) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
+
+    const levels = config.colorCount;
+    const baseStrength = 255 / (levels > 1 ? levels - 1 : 1);
+    const ditherStrength = baseStrength * config.patternStrength * 2;
+
+    for (let y = 0; y < ph; y++) {
+        for (let x = 0; x < pw; x++) {
+            const i = (y * pw + x) * 4;
+            const ditherOffset = spiralLUT.get(x, y) * ditherStrength;
+            const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+            const adjustedLuma = luma + ditherOffset;
+            const [r, g, b] = lumaLUT.map(adjustedLuma);
+            pix[i] = r;
+            pix[i + 1] = g;
+            pix[i + 2] = b;
+        }
+    }
+    buffer.updatePixels();
+}
+
+export function drawHalftoneDither(p, buffer, src, config) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    // Usamos un buffer temporal para aplicar los ajustes de imagen una sola vez
+    const tempBuffer = p.createGraphics(pw, ph);
+    tempBuffer.pixelDensity(1);
+    tempBuffer.image(src, 0, 0, pw, ph);
+    tempBuffer.loadPixels();
+    applyImageAdjustments(tempBuffer.pixels, config);
+    // No necesitamos updatePixels() ya que leeremos con get()
+
+    buffer.background(255); // Fondo blanco para el semitono
+    buffer.noStroke();
+    buffer.fill(0); // Puntos negros
+
+    // El tamaño de celda podría ser un parámetro en `config` en el futuro
+    const cellSize = 8;
+    const k = cellSize / 255; // Factor de escala para el tamaño del punto
+
+    for (let y = 0; y < ph; y += cellSize) {
+        for (let x = 0; x < pw; x += cellSize) {
+            // Usar get() para tomar un color promedio del área es simple pero lento.
+            // Una optimización sería calcular la luminancia promedio del bloque manualmente.
+            const c = tempBuffer.get(x + cellSize / 2, y + cellSize / 2);
+            const luma = (p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114);
+
+            const dotSize = (255 - luma) * k;
+            buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
+        }
+    }
+    tempBuffer.remove(); // Liberar memoria
+}
+
+// --- Marcadores de posición para futuros algoritmos ---
+
+export function drawPatternDither(p, buffer, src, config, lumaLUT) {
+    // Lógica futura:
+    // 1. Crear un set de patrones (p.ej. 8x8 p5.Graphics) para 16 niveles de gris.
+    // 2. Procesar la imagen de entrada con applyImageAdjustments.
+    // 3. Iterar sobre la imagen en bloques de 8x8.
+    // 4. Calcular la luminancia promedio de cada bloque.
+    // 5. Mapear esa luminancia al patrón más cercano.
+    // 6. Dibujar (image()) el patrón correspondiente en el buffer de salida.
+    console.warn("Pattern Dithering no implementado aún.");
+    buffer.image(src, 0, 0, buffer.width, buffer.height); // Mostrar original como fallback
+}
+
+export function drawDotSpacingDither(p, buffer, src, config, lumaLUT) {
+    // Lógica futura:
+    // 1. Procesar la imagen de entrada con applyImageAdjustments y convertir a escala de grises.
+    // 2. Iterar sobre los píxeles.
+    // 3. La luminancia de cada píxel (invertida, 0=negro, 255=blanco) se convierte en una probabilidad (0 a 1).
+    // 4. Usar `if (Math.random() < probability)` para decidir si dibujar un punto en esa coordenada.
+    // 5. Una mejora sería usar un algoritmo de muestreo Poisson-disc para un espaciado más natural.
+    console.warn("Dot Spacing Dithering no implementado aún.");
+    buffer.image(src, 0, 0, buffer.width, buffer.height); // Mostrar original como fallback
+}
