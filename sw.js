@@ -10,7 +10,6 @@
 
 const CACHE_NAME = 'ditherlab-v7-cache-20251008'; // Versión actualizada
 
-// ✅ CORREGIDO: Se añaden las rutas relativas a los íconos.
 const localUrlsToCache = [
   './',
   './index.html',
@@ -51,13 +50,11 @@ self.addEventListener('install', event => {
       .then(cache => {
         console.log('Cache abierto. Almacenando archivos...');
         
-        // ✅ MEJORADO: Cachear URLs de CDN con 'no-cors'
         const cdnPromises = cdnUrlsToCache.map(url => {
           const request = new Request(url, { mode: 'no-cors' });
           return fetch(request).then(response => cache.put(request, response));
         });
 
-        // Cachear URLs locales
         const localPromise = cache.addAll(localUrlsToCache);
 
         return Promise.all([...cdnPromises, localPromise]);
