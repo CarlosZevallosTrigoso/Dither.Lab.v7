@@ -47,6 +47,7 @@ export function sketch(p) {
   let bufferPool;
   let lumaLUT, bayerLUT, blueNoiseLUT;
   let needsRedraw = true;
+  let originalMediaBuffer = null; // Buffer persistente para la imagen original
 
   const forceRedraw = () => {
     needsRedraw = true;
@@ -76,11 +77,21 @@ export function sketch(p) {
     events.on('timeline:updated', forceRedraw);
     events.on('curves:updated', forceRedraw);
     events.on('presets:loaded', forceRedraw);
-    events.on('render:force-redraw', forceRedraw); // Escucha el nuevo evento
+    events.on('render:force-redraw', forceRedraw);
 
     events.on('media:loaded', () => {
         const { width, height } = calculateCanvasDimensions();
         p.resizeCanvas(width, height);
+
+        // Crear y dibujar en el buffer de la imagen original una sola vez
+        if (originalMediaBuffer) {
+            originalMediaBuffer.remove();
+        }
+        originalMediaBuffer = p.createGraphics(p.width, p.height);
+        originalMediaBuffer.pixelDensity(1);
+        originalMediaBuffer.image(getState().media, 0, 0, p.width, p.height);
+        originalMediaBuffer.loadPixels(); // Cargar los píxeles para tenerlos listos
+
         forceRedraw();
     });
 
@@ -95,16 +106,17 @@ export function sketch(p) {
 
     events.on('metrics:calculate', () => {
         const { media } = getState();
-        if (!media) return;
+        if (!media || !originalMediaBuffer) return;
 
-        const origBuffer = p.createGraphics(p.width, p.height);
-        origBuffer.pixelDensity(1);
-        origBuffer.image(media, 0, 0, p.width, p.height);
-        const processedBuffer = p.get();
-        const psnr = calculatePSNR(origBuffer, processedBuffer);
-        const ssim = calculateSSIM(origBuffer, processedBuffer);
-        const compression = calculateCompression(processedBuffer);
-        origBuffer.remove();
+        p.loadPixels(); // Asegurarnos de tener los píxeles del canvas procesado
+
+        const originalPixels = originalMediaBuffer.pixels;
+        const processedPixels = p.pixels;
+
+        const psnr = calculatePSNR(originalPixels, processedPixels);
+        const ssim = calculateSSIM(originalPixels, processedPixels);
+        const compression = calculateCompression(processedPixels);
+        
         events.emit('metrics:results', { psnr, ssim, compression });
     });
 
@@ -114,6 +126,14 @@ export function sketch(p) {
   p.windowResized = debounce(() => {
     const { width, height } = calculateCanvasDimensions();
     p.resizeCanvas(width, height);
+    
+    // Si hay un medio cargado, redibujar el buffer original
+    if (getState().media && originalMediaBuffer) {
+        originalMediaBuffer.resizeCanvas(width, height);
+        originalMediaBuffer.image(getState().media, 0, 0, width, height);
+        originalMediaBuffer.loadPixels();
+    }
+
     needsRedraw = true;
     p.redraw();
   }, 100);
