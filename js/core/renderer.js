@@ -5,8 +5,8 @@
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
-import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither } from './algorithms.js';
+import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT, SpiralLUT } from '../utils/optimizations.js';
+import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawSpiralDither, drawHalftoneDither, drawPatternDither, drawDotSpacingDither } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -46,7 +46,7 @@ export function sketch(p) {
   let canvas;
   let bufferPool;
   let colorCache;
-  let lumaLUT, bayerLUT, blueNoiseLUT;
+  let lumaLUT, bayerLUT, blueNoiseLUT, spiralLUT;
   let needsRedraw = true;
 
   window.triggerRedraw = () => {
@@ -72,6 +72,7 @@ export function sketch(p) {
     lumaLUT = new LumaLUT();
     bayerLUT = new BayerLUT();
     blueNoiseLUT = new BlueNoiseLUT();
+    spiralLUT = new SpiralLUT(16); // Instanciamos la nueva LUT en espiral
 
     p.noLoop();
 
@@ -184,6 +185,18 @@ export function sketch(p) {
           break;
         case 'riemersma':
             drawRiemersmaDither(p, buffer, media, config, lumaLUT);
+            break;
+        case 'spiral-dither':
+            drawSpiralDither(p, buffer, media, config, lumaLUT, spiralLUT);
+            break;
+        case 'halftone-dither':
+            drawHalftoneDither(p, buffer, media, config);
+            break;
+        case 'pattern-dither':
+            drawPatternDither(p, buffer, media, config, lumaLUT);
+            break;
+        case 'dot-spacing-dither':
+            drawDotSpacingDither(p, buffer, media, config, lumaLUT);
             break;
         default:
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
