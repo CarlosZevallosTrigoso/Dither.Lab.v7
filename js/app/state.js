@@ -30,9 +30,9 @@ const state = {
     brightness: 0,
     contrast: 1.0,
     saturation: 1.0,
-    curvesLUTs: null
+    curvesLUTs: null,
+    halftoneSize: 10 // <-- NUEVO PARÁMETRO CON UN VALOR INICIAL
   },
-  // ✅ AÑADIDO: Estado de curvas para el editor
   curves: {
     rgb: [{x: 0, y: 0}, {x: 255, y: 255}],
     r: [{x: 0, y: 0}, {x: 255, y: 255}],
