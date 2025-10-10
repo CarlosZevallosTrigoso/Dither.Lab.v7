@@ -391,7 +391,7 @@ function updateUI(state) {
 
     if (isDithering) {
         const isErrorDiffusion = KERNELS[config.effect] || config.effect === 'variable-error';
-        const isOrdered = config.effect === "bayer" || config.effect === "blue-noise";
+        const isOrdered = ["bayer", "blue-noise", "spiral-dither", "halftone-dither"].includes(config.effect);
         
         if (elements.errorDiffusionControls) {
             elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
