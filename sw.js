@@ -17,7 +17,7 @@ const localUrlsToCache = [
   './manifest.json',
   './icons/icon-192x192.png',
   './icons/icon-512x512.png',
-  './icons/icon-maskable-512x512.png',
+  // './icons/icon-maskable-512x512.png', // ELIMINADO: Este archivo no existe y causaba el error.
   './js/app/main.js',
   './js/app/pwa.js',
   './js/app/events.js',
