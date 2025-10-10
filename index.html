@@ -201,7 +201,7 @@
         </div>
         
         <div id="ditherControls" class="bg-slate-800 rounded-lg p-4">
-          <h3 class="font-bold text-green-300 mb-3">CONTROLES AVANZADOS</h3>
+          <h3 class="font-bold text-green-300 mb-3">CONTROLES DE DITHER</h3>
           <label id="ditherScaleLabel" class="block mb-3">
             <span class="text-sm">Escala: <span id="ditherScaleVal">2</span></span>
             <input id="ditherScale" type="range" min="1" max="10" value="2" class="w-full"/>
@@ -227,7 +227,43 @@
              </label>
           </div>
         </div>
-        
+
+        <div id="qualityControls" class="bg-slate-800 rounded-lg p-4 hidden">
+            <h3 class="font-bold text-cyan-300 mb-3">CALIDAD DE IMAGEN</h3>
+            <div class="space-y-3">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input id="nativeQualityToggle" type="checkbox" class="w-4 h-4"/>
+                    <span class="text-sm">Procesar a resolución nativa</span>
+                </label>
+                <label class="block">
+                    <span class="text-sm">Nitidez (Sharpening): <span id="sharpeningVal">0</span>%</span>
+                    <input id="sharpeningSlider" type="range" min="0" max="100" value="0" class="w-full"/>
+                </label>
+            </div>
+        </div>
+
+        <div id="artisticControls" class="bg-slate-800 rounded-lg p-4 hidden">
+            <h3 class="font-bold text-pink-300 mb-3">CONTROLES ARTÍSTICOS</h3>
+            
+            <div id="errorArtisticControls" class="space-y-3">
+                <label class="block">
+                    <span class="text-sm">Gamma de Error: <span id="errorGammaVal">1.00</span></span>
+                    <input id="errorGammaSlider" type="range" min="50" max="200" value="100" class="w-full"/>
+                </label>
+                <label class="block">
+                    <span class="text-sm">Ruido de Difusión: <span id="diffusionNoiseVal">0</span></span>
+                    <input id="diffusionNoiseSlider" type="range" min="0" max="20" value="0" class="w-full"/>
+                </label>
+            </div>
+
+            <div id="orderedArtisticControls" class="space-y-3 hidden">
+                <label class="block">
+                    <span class="text-sm">Mezcla de Patrón: <span id="patternMixVal">50</span>%</span>
+                    <input id="patternMixSlider" type="range" min="0" max="100" value="50" class="w-full"/>
+                </label>
+            </div>
+        </div>
+
         <div class="bg-slate-800 rounded-lg p-4">
           <h2 class="font-bold text-orange-300 mb-3">PRESETS</h2>
           <div class="flex gap-2 mb-3">
