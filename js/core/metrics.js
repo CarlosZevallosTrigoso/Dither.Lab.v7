@@ -10,23 +10,20 @@
  */
 
 /**
- * Calcula el PSNR entre dos imágenes (buffers de p5.js).
+ * Calcula el PSNR entre dos arrays de píxeles.
  * Un valor más alto indica una mejor calidad (menos error).
- * @param {p5.Graphics} original - El buffer de la imagen original.
- * @param {p5.Graphics} processed - El buffer de la imagen procesada.
+ * @param {Uint8ClampedArray} originalPixels - El array de píxeles de la imagen original.
+ * @param {Uint8ClampedArray} processedPixels - El array de píxeles de la imagen procesada.
  * @returns {number|Infinity} El valor de PSNR en decibelios (dB).
  */
-export function calculatePSNR(original, processed) {
-  original.loadPixels();
-  processed.loadPixels();
-
+export function calculatePSNR(originalPixels, processedPixels) {
   let mse = 0;
-  const len = original.pixels.length;
+  const len = originalPixels.length;
 
   for (let i = 0; i < len; i += 4) {
-    const dr = original.pixels[i] - processed.pixels[i];
-    const dg = original.pixels[i + 1] - processed.pixels[i + 1];
-    const db = original.pixels[i + 2] - processed.pixels[i + 2];
+    const dr = originalPixels[i] - processedPixels[i];
+    const dg = originalPixels[i + 1] - processedPixels[i + 1];
+    const db = originalPixels[i + 2] - processedPixels[i + 2];
     mse += (dr * dr + dg * dg + db * db) / 3;
   }
 
@@ -39,24 +36,21 @@ export function calculatePSNR(original, processed) {
 }
 
 /**
- * Calcula el SSIM entre dos imágenes.
+ * Calcula el SSIM entre dos arrays de píxeles.
  * Un valor cercano a 1 indica una alta similitud estructural.
- * @param {p5.Graphics} original - El buffer de la imagen original.
- * @param {p5.Graphics} processed - El buffer de la imagen procesada.
+ * @param {Uint8ClampedArray} originalPixels - El array de píxeles de la imagen original.
+ * @param {Uint8ClampedArray} processedPixels - El array de píxeles de la imagen procesada.
  * @returns {number} El índice SSIM, un valor entre 0 y 1.
  */
-export function calculateSSIM(original, processed) {
-  original.loadPixels();
-  processed.loadPixels();
-
+export function calculateSSIM(originalPixels, processedPixels) {
   let meanX = 0, meanY = 0;
   let varX = 0, varY = 0, covXY = 0;
-  const len = original.pixels.length / 4;
+  const len = originalPixels.length / 4;
 
   // Convertir a escala de grises y calcular medias
   for (let i = 0; i < len * 4; i += 4) {
-    const x = (original.pixels[i] * 0.299 + original.pixels[i + 1] * 0.587 + original.pixels[i + 2] * 0.114);
-    const y = (processed.pixels[i] * 0.299 + processed.pixels[i + 1] * 0.587 + processed.pixels[i + 2] * 0.114);
+    const x = (originalPixels[i] * 0.299 + originalPixels[i + 1] * 0.587 + originalPixels[i + 2] * 0.114);
+    const y = (processedPixels[i] * 0.299 + processedPixels[i + 1] * 0.587 + processedPixels[i + 2] * 0.114);
     meanX += x;
     meanY += y;
   }
@@ -66,8 +60,8 @@ export function calculateSSIM(original, processed) {
 
   // Calcular varianzas y covarianza
   for (let i = 0; i < len * 4; i += 4) {
-    const x = (original.pixels[i] * 0.299 + original.pixels[i + 1] * 0.587 + original.pixels[i + 2] * 0.114);
-    const y = (processed.pixels[i] * 0.299 + processed.pixels[i + 1] * 0.587 + processed.pixels[i + 2] * 0.114);
+    const x = (originalPixels[i] * 0.299 + originalPixels[i + 1] * 0.587 + originalPixels[i + 2] * 0.114);
+    const y = (processedPixels[i] * 0.299 + processedPixels[i + 1] * 0.587 + processedPixels[i + 2] * 0.114);
     varX += (x - meanX) * (x - meanX);
     varY += (y - meanY) * (y - meanY);
     covXY += (x - meanX) * (y - meanY);
@@ -89,18 +83,16 @@ export function calculateSSIM(original, processed) {
 
 /**
  * Calcula el número de colores únicos y el ratio de compresión de paleta.
- * @param {p5.Graphics} buffer - El buffer de la imagen procesada.
+ * @param {Uint8ClampedArray} pixels - El array de píxeles de la imagen procesada.
  * @returns {{unique: number, ratio: number}} Objeto con el número de colores únicos y el ratio.
  */
-export function calculateCompression(buffer) {
-  buffer.loadPixels();
-
+export function calculateCompression(pixels) {
   const uniqueColors = new Set();
-  const len = buffer.pixels.length;
+  const len = pixels.length;
 
   for (let i = 0; i < len; i += 4) {
     // Crear un solo número para representar el color RGB
-    const color = (buffer.pixels[i] << 16) | (buffer.pixels[i + 1] << 8) | buffer.pixels[i + 2];
+    const color = (pixels[i] << 16) | (pixels[i + 1] << 8) | pixels[i + 2];
     uniqueColors.add(color);
   }
 
