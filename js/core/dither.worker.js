@@ -1,15 +1,13 @@
 /**
  * ============================================================================
- * DitherLab v7 - Dithering Web Worker
+ * DitherLab v7 - Dithering Web Worker (VERSIÓN CORREGIDA)
  * ============================================================================
- * - Este worker se ejecuta en un hilo secundario para no bloquear la UI.
- * - Recibe los datos de la imagen y la configuración desde el hilo principal.
- * - Realiza todo el cálculo pesado de los algoritmos de dithering.
- * - Devuelve el array de píxeles procesado al hilo principal.
+ * - Corregido el error TypeError en postMessage.
+ * - Se asegura el formato correcto para transferir el objeto ImageData.
  * ============================================================================
  */
 
-// KERNELS y constantes necesarios para los algoritmos, ahora viven en el worker.
+// KERNELS y constantes necesarios para los algoritmos
 const KERNELS = {
   'floyd-steinberg': { divisor: 16, points: [{ dx: 1, dy: 0, w: 7 }, { dx: -1, dy: 1, w: 3 }, { dx: 0, dy: 1, w: 5 }, { dx: 1, dy: 1, w: 1 }] },
   'atkinson': { divisor: 8, points: [{ dx: 1, dy: 0, w: 1 }, { dx: 2, dy: 0, w: 1 }, { dx: -1, dy: 1, w: 1 }, { dx: 0, dy: 1, w: 1 }, { dx: 1, dy: 1, w: 1 }, { dx: 0, dy: 2, w: 1 }] },
@@ -27,7 +25,7 @@ for (let i = 0; i < 16; i++) {
     bayerMatrix[i] = (BAYER_4x4[Math.floor(i / 4)][i % 4] / 16.0 - 0.5);
 }
 
-// Lógica de los algoritmos (extraída de algorithms.js)
+// Lógica de los algoritmos
 function drawPosterize(pixels, config, lumaLUT) {
     const len = pixels.length;
     const levels = config.colorCount;
@@ -52,7 +50,7 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
     if (!kernel && config.effect !== 'bayer') return;
 
     if (config.useOriginalColor) {
-        // ... (La lógica para color original se mantiene igual)
+        // (La lógica para color original se mantiene igual)
     } else {
         if (config.effect === 'bayer') {
             const levels = config.colorCount;
@@ -105,32 +103,25 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
     }
 }
 
-// Helper para mapear luminancia usando la LUT
 function mapLuma(luma, lumaLUT) {
     const index = Math.max(0, Math.min(Math.floor(luma), 255));
     const pos = index * 3;
     return [lumaLUT[pos], lumaLUT[pos + 1], lumaLUT[pos + 2]];
 }
 
-
-// El manejador principal de mensajes del worker
 self.onmessage = function(e) {
     const { imageData, config, lumaLUT, pw, ph } = e.data;
-    const pixels = imageData.data; // Es un Uint8ClampedArray
+    const pixels = imageData.data;
 
-    // Seleccionamos el algoritmo a ejecutar
     switch(config.effect) {
         case 'posterize':
             drawPosterize(pixels, config, lumaLUT);
             break;
-        // NOTA: Otros algoritmos como blue-noise, variable-error, etc. se añadirían aquí.
-        // Por simplicidad, nos centramos en los más comunes para esta refactorización.
         default:
             drawDither(pixels, config, lumaLUT, pw, ph);
     }
 
-    // Devolvemos el array de píxeles modificado al hilo principal.
-    // El segundo argumento es un array de "Transferable Objects", lo que
-    // permite pasar el buffer de memoria sin copiarlo, es casi instantáneo.
-    self.postMessage({ imageData }, [imageData.buffer]);
+    // ========= LÍNEA CORREGIDA =========
+    // Se envía el objeto ImageData directamente, y se transfiere su buffer interno.
+    self.postMessage(imageData, [imageData.data.buffer]);
 };
