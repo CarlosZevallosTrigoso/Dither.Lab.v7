@@ -43,14 +43,13 @@ export function applyImageAdjustments(pixels, config) {
                 g = luma + (g - luma) * saturation;
                 b = luma + (b - luma) * saturation;
             }
+            // Clamp (asegurar que los valores estén entre 0 y 255) solo para ajustes básicos
+            r = Math.max(0, Math.min(255, r));
+            g = Math.max(0, Math.min(255, g));
+            b = Math.max(0, Math.min(255, b));
         }
 
-        // Clamp (asegurar que los valores estén entre 0 y 255)
-        r = Math.max(0, Math.min(255, r));
-        g = Math.max(0, Math.min(255, g));
-        b = Math.max(0, Math.min(255, b));
-
-        // 2. Aplicar Curvas
+        // 2. Aplicar Curvas (no necesitan clamp, la LUT ya está en el rango 0-255)
         if (hasCurves) {
             if (curvesLUTs.rgb) {
                 r = curvesLUTs.rgb[Math.round(r)];
@@ -62,9 +61,9 @@ export function applyImageAdjustments(pixels, config) {
             if (curvesLUTs.b) b = curvesLUTs.b[Math.round(b)];
         }
 
-        pixels[i] = Math.max(0, Math.min(255, r));
-        pixels[i + 1] = Math.max(0, Math.min(255, g));
-        pixels[i + 2] = Math.max(0, Math.min(255, b));
+        pixels[i] = r;
+        pixels[i + 1] = g;
+        pixels[i + 2] = b;
     }
 }
 
