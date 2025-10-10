@@ -6,7 +6,7 @@
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, ColorCache, LumaLUT, BayerLUT, BlueNoiseLUT, SpiralLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawSpiralDither, drawHalftoneDither, drawPatternDither, drawDotSpacingDither } from './algorithms.js';
+import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -46,7 +46,7 @@ export function sketch(p) {
   let canvas;
   let bufferPool;
   let colorCache;
-  let lumaLUT, bayerLUT, blueNoiseLUT, spiralLUT;
+  let lumaLUT, bayerLUT, blueNoiseLUT;
   let needsRedraw = true;
 
   window.triggerRedraw = () => {
@@ -56,11 +56,9 @@ export function sketch(p) {
 
   p.setup = () => {
     const { width, height } = calculateCanvasDimensions();
-    // ✅ CORRECCIÓN: Volvemos al renderizador 2D por defecto, es más estable.
     canvas = p.createCanvas(width, height);
     canvas.parent('canvasContainer');
     
-    // ✅ CORRECCIÓN: Eliminamos el atributo { willReadFrequently: true } que rompía la aceleración por hardware en Chrome.
     canvas.elt.getContext('2d', { alpha: false });
     
     p.pixelDensity(1);
@@ -72,7 +70,6 @@ export function sketch(p) {
     lumaLUT = new LumaLUT();
     bayerLUT = new BayerLUT();
     blueNoiseLUT = new BlueNoiseLUT();
-    spiralLUT = new SpiralLUT(16); // Instanciamos la nueva LUT en espiral
 
     p.noLoop();
 
@@ -142,7 +139,6 @@ export function sketch(p) {
       p.textFont('monospace');
       p.textSize(20);
       p.textAlign(p.CENTER, p.CENTER);
-      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para el texto.
       p.text('Arrastra un video o imagen\npara comenzar', p.width / 2, p.height / 2);
       needsRedraw = false;
       return;
@@ -186,28 +182,12 @@ export function sketch(p) {
         case 'riemersma':
             drawRiemersmaDither(p, buffer, media, config, lumaLUT);
             break;
-        case 'spiral-dither':
-            drawSpiralDither(p, buffer, media, config, lumaLUT, spiralLUT);
-            break;
         case 'halftone-dither':
             drawHalftoneDither(p, buffer, media, config);
-            break;
-        case 'pattern-dither':
-            drawPatternDither(p, buffer, media, config, lumaLUT);
-            break;
-        case 'dot-spacing-dither':
-            // =================================================================
-            // ========= INICIO DE LA CORRECCIÓN DEL ERROR =========
-            // =================================================================
-            drawDotSpacingDither(p, buffer, media, config, lumaLUT, blueNoiseLUT);
-            // =================================================================
-            // ============ FIN DE LA CORRECCIÓN DEL ERROR ============
-            // =================================================================
             break;
         default:
           drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
       }
-      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para la imagen.
       p.image(buffer, 0, 0, p.width, p.height);
 
     } else {
@@ -218,7 +198,6 @@ export function sketch(p) {
       applyImageAdjustments(buffer.pixels, config);
       buffer.updatePixels();
       
-      // ✅ CORRECCIÓN: Volvemos a las coordenadas 2D para la imagen.
       p.image(buffer, 0, 0, p.width, p.height);
     }
 
