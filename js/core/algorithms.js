@@ -111,7 +111,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
     applyImageAdjustments(pix, config);
 
     if (config.useOriginalColor) {
-        // Lógica para dithering a color original
         const levels = config.colorCount;
         const step = 255 / (levels > 1 ? levels - 1 : 1);
         const kernel = KERNELS[config.effect];
@@ -141,7 +140,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                 let errG = oldG - newG;
                 let errB = oldB - newB;
                 
-                // NUEVO: Aplicar Gamma de Error y Fuerza de Difusión
                 const strength = config.diffusionStrength;
                 const gamma = config.errorGamma;
                 errR = Math.pow(Math.abs(errR / 255), gamma) * 255 * Math.sign(errR) * strength;
@@ -164,7 +162,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             }
         }
     } else {
-        // Lógica para dithering a paleta (monocromo o color)
         if (config.effect === 'bayer') {
             const levels = config.colorCount;
             const baseStrength = 255 / levels;
@@ -175,8 +172,7 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                     const i = (y * pw + x) * 4;
                     const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
                     const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
-
-                    // NUEVO: Mezcla de Patrón
+                    
                     const mixRatio = config.patternMix;
                     const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
                     
@@ -190,7 +186,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             const kernel = KERNELS[config.effect];
             if (!kernel) return;
             
-            // NUEVO: Buffer de Luminancia para optimización
             const lumaBuffer = new Float32Array(pw * ph);
             for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
                 lumaBuffer[j] = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
@@ -209,7 +204,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
                     const lumaIndex = y * pw + x;
                     const pixIndex = lumaIndex * 4;
                     
-                    // NUEVO: Añadir ruido y leer del buffer de luminancia
                     const noise = (Math.random() * 2 - 1) * config.diffusionNoise;
                     const oldLuma = lumaBuffer[lumaIndex] + noise;
                     
@@ -222,7 +216,6 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
 
                     let err = oldLuma - newLuma;
                     
-                    // NUEVO: Aplicar Gamma de Error y Fuerza de Difusión
                     const strength = config.diffusionStrength;
                     const gamma = config.errorGamma;
                     const finalError = Math.pow(Math.abs(err / 255), gamma) * 255 * Math.sign(err) * strength;
@@ -266,7 +259,6 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
             const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
             const ditherOffset = blueNoiseLUT.get(x, y) * ditherStrength;
 
-            // NUEVO: Mezcla de Patrón
             const mixRatio = config.patternMix;
             const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
 
@@ -278,10 +270,6 @@ export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
     }
     buffer.updatePixels();
 }
-
-// Las implementaciones de drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, y drawHalftoneDither
-// se mantienen igual, ya que las nuevas lógicas son más aplicables a los algoritmos básicos de difusión y ordenado.
-// Si se desea, se podrían adaptar estas nuevas lógicas a ellos también.
 
 export function drawVariableError(p, buffer, src, config, lumaLUT) {
     const pw = buffer.width;
@@ -295,7 +283,6 @@ export function drawVariableError(p, buffer, src, config, lumaLUT) {
 
     const kernel = KERNELS['floyd-steinberg'];
 
-    // Calcular gradientes para detectar bordes
     const gradients = new Float32Array(pw * ph);
     for (let y = 1; y < ph - 1; y++) {
         for (let x = 1; x < pw - 1; x++) {
@@ -313,7 +300,6 @@ export function drawVariableError(p, buffer, src, config, lumaLUT) {
         for (let x = 0; x < pw; x++) {
             const i = (y * pw + x) * 4;
             const gradient = gradients[y * pw + x] || 0;
-            // La fuerza de difusión disminuye en zonas de alto gradiente (bordes)
             const adaptiveStrength = config.diffusionStrength * (1 - gradient * 0.75);
             
             const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
@@ -370,8 +356,7 @@ export function drawOstromoukhovDither(p, buffer, src, config, lumaLUT, blueNois
             const i = (y * pw + x) * 4;
             const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
             
-            // Umbral variable con ruido azul
-            const noise = (blueNoiseLUT.get(x, y) + 0.5); // Ruido de 0 a 1
+            const noise = (blueNoiseLUT.get(x, y) + 0.5);
             const variableThreshold = step / 2 * (1 + (noise - 0.5) * 0.5);
             const newLuma = (oldLuma > variableThreshold) ? Math.ceil(oldLuma / step) * step : Math.floor(oldLuma / step) * step;
 
@@ -515,4 +500,53 @@ export function drawHalftoneDither(p, buffer, src, config) {
         }
     }
     tempBuffer.remove();
+}
+
+/**
+ * Aplica un filtro de nitidez (sharpen) manual a un array de píxeles.
+ * @param {Uint8ClampedArray} pixels - El array de píxeles del canvas (p.pixels).
+ * @param {number} width - El ancho del canvas.
+ * @param {number} height - El alto del canvas.
+ * @param {number} strength - La fuerza del efecto (0.0 a 1.0).
+ */
+export function applySharpening(pixels, width, height, strength) {
+    if (strength <= 0) return;
+
+    const kernel = [
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+    ];
+
+    const src = new Uint8ClampedArray(pixels);
+    const len = pixels.length;
+
+    for (let i = 0; i < len; i += 4) {
+        const x = (i / 4) % width;
+        const y = Math.floor((i / 4) / width);
+
+        if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
+            let sumR = 0;
+            let sumG = 0;
+            let sumB = 0;
+
+            for (let ky = -1; ky <= 1; ky++) {
+                for (let kx = -1; kx <= 1; kx++) {
+                    const idx = ((y + ky) * width + (x + kx)) * 4;
+                    const weight = kernel[ky + 1][kx + 1];
+                    sumR += src[idx] * weight;
+                    sumG += src[idx + 1] * weight;
+                    sumB += src[idx + 2] * weight;
+                }
+            }
+
+            const originalR = src[i];
+            const originalG = src[i + 1];
+            const originalB = src[i + 2];
+
+            pixels[i] = originalR * (1 - strength) + sumR * strength;
+            pixels[i + 1] = originalG * (1 - strength) + sumG * strength;
+            pixels[i + 2] = originalB * (1 - strength) + sumB * strength;
+        }
+    }
 }
