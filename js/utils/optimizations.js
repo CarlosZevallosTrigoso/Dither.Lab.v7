@@ -48,28 +48,6 @@ export class BufferPool {
 }
 
 /**
- * Almacena en caché los objetos `p5.Color` para evitar la sobrecarga de
- * convertir strings hexadecimales a objetos de color repetidamente.
- */
-export class ColorCache {
-  constructor(p) {
-    this.p = p;
-    this.cache = new Map();
-  }
-
-  getColor(hex) {
-    if (!this.cache.has(hex)) {
-      this.cache.set(hex, this.p.color(hex));
-    }
-    return this.cache.get(hex);
-  }
-
-  getColors(hexArray) {
-    return hexArray.map(hex => this.getColor(hex));
-  }
-}
-
-/**
  * Crea una Tabla de Búsqueda (Look-Up Table) para mapear rápidamente
  * un valor de luminancia (0-255) a un color de la paleta actual.
  */
@@ -142,38 +120,5 @@ export class BlueNoiseLUT {
   get(x, y) {
     const index = (y % 8) * 8 + (x % 8);
     return this.noise[index] - 0.5;
-  }
-}
-
-/**
- * LUT para la matriz de umbrales del dithering en espiral.
- */
-export class SpiralLUT {
-  constructor(size = 8) {
-    this.size = size;
-    this.matrix = new Float32Array(size * size);
-    this.generate();
-  }
-
-  generate() {
-    let x = 0, y = 0, dx = 0, dy = -1;
-    const n = this.size;
-    for (let i = 0; i < n * n; i++) {
-      const matrixX = Math.floor(x + n / 2);
-      const matrixY = Math.floor(y + n / 2);
-      if (matrixX >= 0 && matrixX < n && matrixY >= 0 && matrixY < n) {
-        this.matrix[matrixY * n + matrixX] = (i / (n * n - 1)) - 0.5;
-      }
-      if (x === y || (x < 0 && x === -y) || (x > 0 && x === 1 - y)) {
-        [dx, dy] = [-dy, dx];
-      }
-      x += dx;
-      y += dy;
-    }
-  }
-
-  get(x, y) {
-    const index = (y % this.size) * this.size + (x % this.size);
-    return this.matrix[index];
   }
 }
