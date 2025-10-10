@@ -6,7 +6,7 @@
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, LumaLUT, BayerLUT, BlueNoiseLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither, applySharpening } from './algorithms.js';
+import { applyImageAdjustments, drawDither, drawPosterize, drawBlueNoise, drawVariableError, drawOstromoukhovDither, drawRiemersmaDither, drawHalftoneDither } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -83,14 +83,13 @@ export function sketch(p) {
         const { width, height } = calculateCanvasDimensions();
         p.resizeCanvas(width, height);
 
-        // Crear y dibujar en el buffer de la imagen original una sola vez
         if (originalMediaBuffer) {
             originalMediaBuffer.remove();
         }
         originalMediaBuffer = p.createGraphics(p.width, p.height);
         originalMediaBuffer.pixelDensity(1);
         originalMediaBuffer.image(getState().media, 0, 0, p.width, p.height);
-        originalMediaBuffer.loadPixels(); // Cargar los píxeles para tenerlos listos
+        originalMediaBuffer.loadPixels();
 
         forceRedraw();
     });
@@ -108,7 +107,7 @@ export function sketch(p) {
         const { media } = getState();
         if (!media || !originalMediaBuffer) return;
 
-        p.loadPixels(); // Asegurarnos de tener los píxeles del canvas procesado
+        p.loadPixels();
 
         const originalPixels = originalMediaBuffer.pixels;
         const processedPixels = p.pixels;
@@ -127,7 +126,6 @@ export function sketch(p) {
     const { width, height } = calculateCanvasDimensions();
     p.resizeCanvas(width, height);
     
-    // Si hay un medio cargado, redibujar el buffer original
     if (getState().media && originalMediaBuffer) {
         originalMediaBuffer.resizeCanvas(width, height);
         originalMediaBuffer.image(getState().media, 0, 0, width, height);
@@ -187,28 +185,43 @@ export function sketch(p) {
       
       const buffer = bufferPool.get(pw, ph, p);
 
+      // Dibujamos la imagen original en el buffer de procesamiento
+      buffer.image(media, 0, 0, pw, ph);
+      buffer.loadPixels();
+      
+      // Aplicamos todos los ajustes (incluyendo la nitidez ahora)
+      applyImageAdjustments(buffer.pixels, config, pw, ph);
+
       switch(config.effect) {
         case 'posterize':
-          drawPosterize(p, buffer, media, config, lumaLUT);
+          drawPosterize(buffer.pixels, config, lumaLUT);
           break;
         case 'blue-noise':
-          drawBlueNoise(p, buffer, media, config, lumaLUT, blueNoiseLUT);
+          drawBlueNoise(buffer.pixels, config, lumaLUT, blueNoiseLUT, pw, ph);
           break;
         case 'variable-error':
-          drawVariableError(p, buffer, media, config, lumaLUT);
+          drawVariableError(buffer.pixels, config, lumaLUT, pw, ph);
           break;
         case 'ostromoukhov':
-          drawOstromoukhovDither(p, buffer, media, config, lumaLUT, blueNoiseLUT);
+          drawOstromoukhovDither(buffer.pixels, config, lumaLUT, blueNoiseLUT, pw, ph);
           break;
         case 'riemersma':
-            drawRiemersmaDither(p, buffer, media, config, lumaLUT);
+            drawRiemersmaDither(buffer.pixels, config, lumaLUT, pw, ph);
             break;
         case 'halftone-dither':
-            drawHalftoneDither(p, buffer, media, config);
+            // Halftone es un caso especial, se gestiona diferente
+            buffer.updatePixels(); // Actualizamos por si hubo ajustes de imagen
+            drawHalftoneDither(p, buffer, buffer, config);
             break;
         default:
-          drawDither(p, buffer, media, config, lumaLUT, bayerLUT);
+          drawDither(buffer.pixels, config, lumaLUT, bayerLUT, pw, ph);
       }
+      
+      // Solo para los algoritmos que modifican el array de píxeles
+      if (config.effect !== 'halftone-dither') {
+        buffer.updatePixels();
+      }
+      
       p.image(buffer, 0, 0, p.width, p.height);
 
     } else {
@@ -216,21 +229,11 @@ export function sketch(p) {
       buffer.image(media, 0, 0, p.width, p.height);
       
       buffer.loadPixels();
-      applyImageAdjustments(buffer.pixels, config);
+      applyImageAdjustments(buffer.pixels, config, p.width, p.height);
       buffer.updatePixels();
       
       p.image(buffer, 0, 0, p.width, p.height);
     }
-
-    // ========================================================================
-    // CORRECCIÓN: Lógica para el Filtro de Nitidez (Sharpening) manual
-    // ========================================================================
-    if (config.sharpeningStrength > 0) {
-      p.loadPixels();
-      applySharpening(p.pixels, p.width, p.height, config.sharpeningStrength);
-      p.updatePixels();
-    }
-    // ========================================================================
 
     events.emit('render:frame-drawn');
 
