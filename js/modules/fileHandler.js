@@ -28,110 +28,105 @@ function rgbToHsl(r, g, b) {
 
 async function generatePaletteFromMedia(media, colorCount, p) {
     showToast('Generando paleta desde el medio...');
-    const tempCanvas = p.createGraphics(100, 100);
+    
+    // Optimización: Muestrear píxeles en lugar de redimensionar.
+    // Esto da una paleta más precisa sin un gran costo de rendimiento.
+    const MAX_SAMPLES = 10000; // Analizar un máximo de 10,000 píxeles
+    const mediaW = media.width;
+    const mediaH = media.height;
+
+    const tempCanvas = p.createGraphics(mediaW, mediaH);
     tempCanvas.pixelDensity(1);
 
-    if (getState().mediaType === 'video') {
-        media.pause();
+    try {
+        if (getState().mediaType === 'video') {
+            media.pause();
+            await new Promise(resolve => {
+                media.elt.onseeked = () => {
+                    requestAnimationFrame(() => {
+                        media.elt.onseeked = null;
+                        resolve();
+                    });
+                };
+                media.time(0);
+            });
+            tempCanvas.elt.getContext('2d').drawImage(media.elt, 0, 0, mediaW, mediaH);
+        } else {
+            tempCanvas.image(media, 0, 0, mediaW, mediaH);
+        }
         
-        await new Promise(resolve => {
-            media.elt.onseeked = () => {
-                requestAnimationFrame(() => {
-                    media.elt.onseeked = null;
-                    resolve();
-                });
-            };
-            media.time(0);
-        });
+        tempCanvas.loadPixels();
         
-        // ✅ SOLUCIÓN DEFINITIVA: Usar la API nativa del canvas para dibujar el video.
-        // Esto es más robusto que la función p5.js 'image()' para esta tarea.
-        try {
-            const ctx = tempCanvas.elt.getContext('2d');
-            ctx.drawImage(media.elt, 0, 0, tempCanvas.width, tempCanvas.height);
-        } catch (e) {
-            console.error("Error al dibujar el video en el canvas temporal:", e);
-            showToast("Error crítico al leer el fotograma del video.", 4000);
-            tempCanvas.remove();
+        const pixels = [];
+        const totalPixels = (tempCanvas.pixels.length / 4);
+        const step = Math.max(1, Math.floor(totalPixels / MAX_SAMPLES));
+
+        for (let i = 0; i < tempCanvas.pixels.length; i += 4 * step) {
+            if (tempCanvas.pixels[i+3] > 128) { // Ignorar píxeles transparentes
+                pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
+            }
+        }
+
+        if (pixels.length === 0) {
+            showToast("No se pudieron leer los colores del medio.", 3000);
             return ['#000000', '#FFFFFF'];
         }
 
-    } else {
-        tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
-    }
-    
-    tempCanvas.loadPixels();
-    
-    const pixels = [];
-    for (let i = 0; i < tempCanvas.pixels.length; i += 4) {
-        if (tempCanvas.pixels[i+3] > 128) {
-            pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
-        }
-    }
-
-    if (pixels.length === 0) {
-        showToast("No se pudieron leer los colores del video.", 3000);
-        tempCanvas.remove();
-        return ['#000000', '#FFFFFF'];
-    }
-
-    // ... (k-means logic)
-    const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
-    let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
-    
-    while (centroids.length < colorCount) {
-        const distances = pixels.map(px => {
-            let minDist = Infinity;
-            centroids.forEach(c => { minDist = Math.min(minDist, colorDist(px, c)); });
-            return minDist * minDist;
-        });
-        const sumDist = distances.reduce((a, b) => a + b, 0);
-        let rand = Math.random() * sumDist;
-        for (let i = 0; i < pixels.length; i++) {
-            rand -= distances[i];
-            if (rand <= 0) {
-                centroids.push(pixels[i]);
-                break;
+        // Algoritmo K-Means++ para encontrar los centroides (colores de la paleta)
+        const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
+        let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
+        
+        while (centroids.length < colorCount) {
+            const distances = pixels.map(px => {
+                let minDist = Infinity;
+                centroids.forEach(c => { minDist = Math.min(minDist, colorDist(px, c)); });
+                return minDist * minDist;
+            });
+            const sumDist = distances.reduce((a, b) => a + b, 0);
+            let rand = Math.random() * sumDist;
+            for (let i = 0; i < pixels.length; i++) {
+                rand -= distances[i];
+                if (rand <= 0) {
+                    centroids.push(pixels[i]);
+                    break;
+                }
             }
         }
-    }
 
-    for (let iter = 0; iter < 10; iter++) {
-        const assignments = pixels.map(px => {
-            let bestCentroid = 0;
-            let minDist = Infinity;
-            centroids.forEach((c, j) => {
-                const dist = colorDist(px, c);
-                if (dist < minDist) {
-                    minDist = dist;
-                    bestCentroid = j;
-                }
+        for (let iter = 0; iter < 10; iter++) {
+            const assignments = pixels.map(px => {
+                let bestCentroid = 0;
+                let minDist = Infinity;
+                centroids.forEach((c, j) => {
+                    const dist = colorDist(px, c);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestCentroid = j;
+                    }
+                });
+                return bestCentroid;
             });
-            return bestCentroid;
-        });
 
-        const newCentroids = Array(colorCount).fill(0).map(() => [0,0,0]);
-        const counts = Array(colorCount).fill(0);
-        pixels.forEach((px, i) => {
-            const centroidIndex = assignments[i];
-            newCentroids[centroidIndex][0] += px[0];
-            newCentroids[centroidIndex][1] += px[1];
-            newCentroids[centroidIndex][2] += px[2];
-            counts[centroidIndex]++;
-        });
+            const newCentroids = Array(colorCount).fill(0).map(() => [0,0,0]);
+            const counts = Array(colorCount).fill(0);
+            pixels.forEach((px, i) => {
+                const centroidIndex = assignments[i];
+                newCentroids[centroidIndex][0] += px[0];
+                newCentroids[centroidIndex][1] += px[1];
+                newCentroids[centroidIndex][2] += px[2];
+                counts[centroidIndex]++;
+            });
 
-        centroids = newCentroids.map((sum, i) => counts[i] > 0 ? sum.map(v => Math.round(v / counts[i])) : centroids[i]);
+            centroids = newCentroids.map((sum, i) => counts[i] > 0 ? sum.map(v => Math.round(v / counts[i])) : centroids[i]);
+        }
+        
+        centroids.sort((a, b) => rgbToHsl(a[0], a[1], a[2])[2] - rgbToHsl(b[0], b[1], b[2])[2]);
+        
+        return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
+
+    } finally {
+        tempCanvas.remove(); // Asegurarnos de limpiar el canvas temporal
     }
-    
-    tempCanvas.remove();
-    
-    centroids.sort((a, b) => {
-        const hslA = rgbToHsl(a[0], a[1], a[2]);
-        const hslB = rgbToHsl(b[0], b[1], b[2]);
-        return hslA[2] - hslB[2];
-    });
-    
-    return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
 }
 
 async function handleFile(file, p) {
