@@ -1,124 +1,410 @@
-/**
- * ============================================================================
- * DitherLab v7 - Constantes y Datos Estáticos
- * ============================================================================
- * - Almacena datos inmutables que la aplicación necesita, como las matrices
- * de difusión de error (kernels) y las descripciones de los algoritmos.
- * - Separar estos datos de la lógica hace que el código sea más limpio y
- * fácil de actualizar.
- * ============================================================================
- */
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>DitherLab v7</title>
+  <meta name="description" content="Procesador avanzado de dithering con una arquitectura modular y optimizada."/>
+  <meta name="theme-color" content="#06b6d4"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="css/styles.css"/>
+  <link rel="icon" href="icons/icon-192x192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+</head>
+<body>
 
-// Define las matrices de difusión de error para varios algoritmos.
-// dx, dy: desplazamiento relativo del píxel vecino.
-// w: peso del error a distribuir.
-export const KERNELS = {
-  'floyd-steinberg': {
-    divisor: 16,
-    points: [
-      { dx: 1, dy: 0, w: 7 },
-      { dx: -1, dy: 1, w: 3 },
-      { dx: 0, dy: 1, w: 5 },
-      { dx: 1, dy: 1, w: 1 }
-    ]
-  },
-  'atkinson': {
-    divisor: 8,
-    points: [
-      { dx: 1, dy: 0, w: 1 }, { dx: 2, dy: 0, w: 1 },
-      { dx: -1, dy: 1, w: 1 }, { dx: 0, dy: 1, w: 1 }, { dx: 1, dy: 1, w: 1 },
-      { dx: 0, dy: 2, w: 1 }
-    ]
-  },
-  'stucki': {
-    divisor: 42,
-    points: [
-      { dx: 1, dy: 0, w: 8 }, { dx: 2, dy: 0, w: 4 },
-      { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 8 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 },
-      { dx: -2, dy: 2, w: 1 }, { dx: -1, dy: 2, w: 2 }, { dx: 0, dy: 2, w: 4 }, { dx: 1, dy: 2, w: 2 }, { dx: 2, dy: 2, w: 1 }
-    ]
-  },
-  'jarvis-judice-ninke': {
-    divisor: 48,
-    points: [
-      { dx: 1, dy: 0, w: 7 }, { dx: 2, dy: 0, w: 5 },
-      { dx: -2, dy: 1, w: 3 }, { dx: -1, dy: 1, w: 5 }, { dx: 0, dy: 1, w: 7 }, { dx: 1, dy: 1, w: 5 }, { dx: 2, dy: 1, w: 3 },
-      { dx: -2, dy: 2, w: 1 }, { dx: -1, dy: 2, w: 3 }, { dx: 0, dy: 2, w: 5 }, { dx: 1, dy: 2, w: 3 }, { dx: 2, dy: 2, w: 1 }
-    ]
-  },
-  'sierra': {
-    divisor: 32,
-    points: [
-      { dx: 1, dy: 0, w: 5 }, { dx: 2, dy: 0, w: 3 },
-      { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 5 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 },
-      { dx: -1, dy: 2, w: 2 }, { dx: 0, dy: 2, w: 3 }, { dx: 1, dy: 2, w: 2 }
-    ]
-  },
-  'two-row-sierra': {
-    divisor: 16,
-    points: [
-        { dx: 1, dy: 0, w: 4 }, { dx: 2, dy: 0, w: 3 },
-        { dx: -2, dy: 1, w: 1 }, { dx: -1, dy: 1, w: 2 }, { dx: 0, dy: 1, w: 3 }, { dx: 1, dy: 1, w: 2 }, { dx: 2, dy: 1, w: 1 }
-    ]
-  },
-  'sierra-lite': {
-    divisor: 4,
-    points: [
-      { dx: 1, dy: 0, w: 2 },
-      { dx: -1, dy: 1, w: 1 }, { dx: 0, dy: 1, w: 1 }
-    ]
-  },
-  'burkes': {
-    divisor: 32,
-    points: [
-      { dx: 1, dy: 0, w: 8 }, { dx: 2, dy: 0, w: 4 },
-      { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 8 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 }
-    ]
-  }
-};
+  <div class="flex flex-col lg:flex-row h-screen max-h-screen">
+      
+    <aside class="w-full lg:w-96 flex-shrink-0 bg-slate-900 p-6 overflow-y-auto sidebar-scroll">
+      <div class="space-y-4">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h1 class="text-3xl font-bold text-cyan-400 cursor-pointer hover:text-cyan-300 transition-colors" onclick="location.reload()" title="Recargar página">DitherLab</h1>
+            <span class="pwa-badge" id="pwaBadge" style="display:none">PWA</span>
+          </div>
+          <button id="shortcutsBtn" class="text-xs bg-slate-800 px-3 py-1 rounded hover:bg-slate-700 border border-slate-700">
+            Atajos (?)
+          </button>
+        </div>
+        <div class="text-xs text-gray-500 -mt-2 mb-4">v7.0 - Modular Edition</div>
+        
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-cyan-300 mb-3">MEDIO</h2>
+          <div class="tooltip w-full">
+            <label class="block w-full text-center py-4 border-2 border-dashed border-slate-600 rounded-lg cursor-pointer hover:border-cyan-400 hover:bg-slate-700 transition-colors" id="dropZone">
+              <span class="text-gray-400">Arrastra video o imagen aquí</span>
+              <input id="fileInput" type="file" accept="video/*,image/*" class="hidden"/>
+            </label>
+            <span class="tooltiptext">Soporta: MP4, WEBM, MOV, PNG, JPG, GIF</span>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button id="playBtn" class="flex-1 py-2 bg-blue-600 rounded hover:bg-blue-500 tooltip disabled:opacity-50" disabled>
+              Play
+              <span class="tooltiptext">Reproducir/Pausar (ESPACIO)</span>
+            </button>
+            <button id="restartBtn" class="px-3 py-2 bg-slate-700 rounded hover:bg-slate-600 tooltip disabled:opacity-50" disabled>
+              ↺
+              <span class="tooltiptext">Reiniciar</span>
+            </button>
+          </div>
+          <div class="text-xs text-gray-400 mt-2 flex items-center gap-2">
+            <span id="mediaType" class="bg-slate-700 px-2 py-1 rounded">No cargado</span>
+            <span id="mediaDimensions"></span>
+          </div>
+        </div>
 
-// Textos descriptivos para cada algoritmo que se mostrarán en la UI.
-export const ALGORITHM_INFO = {
-  'none': "Muestra el medio original sin procesamiento.",
-  'posterize': "Reduce los colores sin tramado. Útil para ver el 'banding' de color puro.",
-  'floyd-steinberg': 'Algoritmo de difusión de error más popular. Balance perfecto entre velocidad y calidad. Distribuye el error a 4 píxeles vecinos.',
-  'atkinson': "Difusión parcial desarrollada en Apple. Solo distribuye 6/8 del error, creando imágenes con más contraste y brillo. Icónico del Mac clásico.",
-  'stucki': "Difusión compleja a 12 píxeles vecinos. Produce el tramado más suave y de mayor calidad, ideal para gradientes.",
-  'bayer': 'Dithering ordenado con matriz de umbrales fija. Produce un patrón geométrico característico. Extremadamente rápido, estética retro.',
-  'blue-noise': "Dithering ordenado de alta calidad usando ruido azul. Produce patrones menos perceptibles que Bayer, más agradable visualmente.",
-  'variable-error': "Algoritmo adaptativo que ajusta la difusión según el contenido local. Preserva mejor los bordes y detalles finos.",
-  'jarvis-judice-ninke': "Difusión de error a 12 píxeles. Mayor área de difusión que Floyd-Steinberg, produce resultados muy suaves con menos artefactos.",
-  'sierra': "Variante de difusión de error con 10 píxeles. Balance entre Stucki y Floyd-Steinberg. Buena calidad con rendimiento aceptable.",
-  'two-row-sierra': "Versión optimizada de Sierra que solo difunde a 7 píxeles en dos filas. Ofrece una excelente calidad visual con un rendimiento mejorado.",
-  'sierra-lite': "Versión ligera de Sierra con solo 4 píxeles. Muy rápido, ideal para preview o imágenes grandes. Similar a Floyd-Steinberg pero más simple.",
-  'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes.",
-  'ostromoukhov': "Difusión de error modulada con ruido azul. Varía la distribución del error para romper los patrones repetitivos, logrando un acabado muy orgánico.",
-  'riemersma': "Procesa los píxeles siguiendo una curva de Hilbert. El error se acumula y pasa de un píxel al siguiente en la curva, creando texturas únicas.",
-  'spiral-dither': 'Dithering ordenado que usa una matriz en espiral para crear texturas fluidas y orgánicas, similares a los surcos de un vinilo.',
-  'halftone-dither': 'Simula la técnica de impresión de semitonos usando puntos de tamaño variable para representar tonos. Ideal para un look de cómic o periódico.',
-  'pattern-dither': 'Utiliza patrones de mapa de bits predefinidos para representar los niveles de luminancia, permitiendo un control artístico total sobre la textura.',
-  'dot-spacing-dither': 'Algoritmo experimental que varía la distancia entre puntos de tamaño fijo para crear la ilusión de tono, similar a un grabado.'
-};
+        <div id="timelinePanel" class="bg-slate-800 rounded-lg p-4 hidden">
+          <h2 class="font-bold text-yellow-300 mb-3">TIMELINE</h2>
+          <div class="timeline-container" id="timeline">
+            <div class="timeline-progress" id="timelineProgress"></div>
+            <div class="timeline-marker in" id="markerIn" style="display: none;"></div>
+            <div class="timeline-marker out" id="markerOut" style="display: none;"></div>
+            <div class="timeline-scrubber" id="timelineScrubber"></div>
+            <div class="timeline-time" id="timelineTime">00:00</div>
+          </div>
+          <div class="mt-3 space-y-2">
+            <div class="flex gap-2 text-xs">
+              <button id="setInBtn" class="flex-1 bg-green-700 px-2 py-1 rounded hover:bg-green-600">[ Entrada</button>
+              <button id="setOutBtn" class="flex-1 bg-red-700 px-2 py-1 rounded hover:bg-red-600">Salida ]</button>
+              <button id="clearMarkersBtn" class="px-3 bg-slate-700 rounded hover:bg-slate-600">✕</button>
+            </div>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="loopSectionToggle" type="checkbox" class="w-4 h-4"/>
+              <span class="text-sm">Loop entre marcadores</span>
+            </label>
+          </div>
+          <div class="mt-3">
+            <label class="block">
+              <span class="text-sm">Velocidad: <span id="playbackSpeedVal">1.00</span>x</span>
+              <input id="playbackSpeedSlider" type="range" min="25" max="200" value="100" class="w-full"/>
+            </label>
+            <div class="flex gap-1 mt-2 text-xs">
+              <button class="speed-preset flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-speed="25">0.25x</button>
+              <button class="speed-preset flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-speed="50">0.5x</button>
+              <button class="speed-preset flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-speed="100">1x</button>
+              <button class="speed-preset flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-speed="150">1.5x</button>
+              <button class="speed-preset flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-speed="200">2x</button>
+            </div>
+          </div>
+          <div class="mt-3 flex gap-2">
+            <button id="prevFrameBtn" class="flex-1 bg-slate-700 px-2 py-2 rounded hover:bg-slate-600">◄ Frame</button>
+            <button id="nextFrameBtn" class="flex-1 bg-slate-700 px-2 py-2 rounded hover:bg-slate-600">Frame ►</button>
+          </div>
+        </div>
 
-// Nombres para mostrar en los menús desplegables.
-export const ALGORITHM_NAMES = {
-  'none': "Ninguno",
-  'posterize': "Posterize",
-  'floyd-steinberg': "Floyd-Steinberg",
-  'atkinson': "Atkinson",
-  'stucki': "Stucki",
-  'bayer': "Bayer",
-  'blue-noise': "Blue Noise",
-  'variable-error': "Variable Error",
-  'jarvis-judice-ninke': "Jarvis-Judice-Ninke",
-  'sierra': "Sierra",
-  'two-row-sierra': "Two-Row Sierra",
-  'sierra-lite': "Sierra Lite",
-  'burkes': "Burkes",
-  'ostromoukhov': "Ostromoukhov",
-  'riemersma': "Riemersma (Hilbert Curve)",
-  'spiral-dither': "Spiral Dither",
-  'halftone-dither': "Halftone Dither",
-  'pattern-dither': "Pattern Dither",
-  'dot-spacing-dither': "Dot Spacing Dither"
-};
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-purple-300 mb-3">ALGORITMO DE DITHERING</h2>
+          <select id="effectSelect" class="w-full bg-slate-700 p-2 rounded text-white">
+            <option value="none">Sin efecto</option>
+            <option value="posterize">Posterize</option>
+            <optgroup label="Difusión de Error">
+              <option value="floyd-steinberg" selected>Floyd-Steinberg</option>
+              <option value="atkinson">Atkinson</option>
+              <option value="stucki">Stucki</option>
+              <option value="jarvis-judice-ninke">Jarvis-Judice-Ninke</option>
+              <option value="sierra">Sierra</option>
+              <option value="two-row-sierra">Two-Row Sierra</option>
+              <option value="sierra-lite">Sierra Lite</option>
+              <option value="burkes">Burkes</option>
+            </optgroup>
+            <optgroup label="Dithering Ordenado">
+              <option value="bayer">Bayer</option>
+              <option value="blue-noise">Blue Noise</option>
+            </optgroup>
+            <optgroup label="Avanzado">
+              <option value="variable-error">Variable Error</option>
+              <option value="ostromoukhov">Ostromoukhov</option>
+              <option value="riemersma">Riemersma (Hilbert Curve)</option>
+            </optgroup>
+            <optgroup label="Artísticos y Experimentales">
+              <option value="halftone-dither">Halftone Dither</option>
+            </optgroup>
+          </select>
+          <div class="mt-3">
+            <h3 class="font-bold text-sky-300 mb-2">ACERCA DEL ALGORITMO</h3>
+            <p id="infoText" class="text-xs text-gray-300 leading-relaxed">...</p>
+          </div>
+        </div>
+        
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h3 class="font-bold text-teal-300 mb-3">PALETA DE COLORES</h3>
+          <div class="space-y-3">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="originalColorToggle" type="checkbox" class="w-4 h-4"/>
+              <span class="text-sm">Aplicar a Color Original</span>
+            </label>
+            <hr class="border-slate-700"/>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="monochromeToggle" type="checkbox" class="w-4 h-4"/>
+              <span class="text-sm">Blanco y Negro</span>
+            </label>
+            <label class="block">
+              <span class="text-sm">Colores: <span id="colorCountVal">4</span></span>
+              <input id="colorCountSlider" type="range" min="2" max="16" value="4" class="w-full"/>
+            </label>
+          </div>
+          <div id="colorPickerContainer" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4"></div>
+        </div>
+        
+        <div class="bg-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-yellow-300">AJUSTES DE IMAGEN</h3>
+            <div class="flex gap-2">
+              <button id="toggleCurvesBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">📈 Curvas</button>
+              <button id="resetImageAdjustmentsBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Resetear</button>
+            </div>
+          </div>
+          <div id="basicImageControls" class="space-y-3">
+            <label class="block">
+              <span class="text-sm">Brillo: <span id="brightnessVal">0</span></span>
+              <input id="brightnessSlider" type="range" min="-100" max="100" value="0" class="w-full"/>
+            </label>
+            <label class="block">
+              <span class="text-sm">Contraste: <span id="contrastVal">100</span>%</span>
+              <input id="contrastSlider" type="range" min="0" max="200" value="100" class="w-full"/>
+            </label>
+            <label class="block">
+              <span class="text-sm">Saturación: <span id="saturationVal">100</span>%</span>
+              <input id="saturationSlider" type="range" min="0" max="200" value="100" class="w-full"/>
+            </label>
+          </div>
+          
+          <div id="curvesEditor" class="hidden space-y-3">
+            <div class="flex gap-2 mb-2">
+              <button class="curve-channel-btn flex-1 bg-slate-600 px-2 py-1 rounded text-xs hover:bg-slate-500 active" data-channel="rgb">RGB</button>
+              <button class="curve-channel-btn flex-1 bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-500" data-channel="r">R</button>
+              <button class="curve-channel-btn flex-1 bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-500" data-channel="g">G</button>
+              <button class="curve-channel-btn flex-1 bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-500" data-channel="b">B</button>
+            </div>
+            
+            <div class="curves-canvas-container">
+              <canvas id="curvesCanvas" width="280" height="280"></canvas>
+              <div class="text-xs text-gray-500 mt-2 flex justify-between">
+                <span>Sombras</span>
+                <span id="curvePointInfo" class="text-cyan-400"></span>
+                <span>Luces</span>
+              </div>
+            </div>
+            
+            <div class="flex gap-2">
+              <button id="resetCurveBtn" class="flex-1 bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-600">Resetear Curva</button>
+              <button id="resetAllCurvesBtn" class="flex-1 bg-slate-700 px-2 py-1 rounded text-xs hover:bg-slate-600">Resetear Todo</button>
+            </div>
+            
+            <div class="text-xs text-gray-400 mt-2">
+              💡 Click para agregar puntos, arrastra para mover, doble-click para eliminar
+            </div>
+          </div>
+        </div>
+        
+        <div id="ditherControls" class="bg-slate-800 rounded-lg p-4">
+          <h3 class="font-bold text-green-300 mb-3">CONTROLES AVANZADOS</h3>
+          <label class="block mb-3">
+            <span class="text-sm">Escala: <span id="ditherScaleVal">2</span></span>
+            <input id="ditherScale" type="range" min="1" max="10" value="2" class="w-full"/>
+          </label>
+          <div id="errorDiffusionControls" class="space-y-3 pt-3 border-t border-slate-700">
+             <label class="flex items-center gap-2 cursor-pointer">
+               <input id="serpentineToggle" type="checkbox" class="w-4 h-4"/>
+               <span class="text-sm">Escaneo en Serpentina</span>
+             </label>
+             <label class="block">
+               <span class="text-sm">Fuerza: <span id="diffusionStrengthVal">100</span>%</span>
+               <input id="diffusionStrengthSlider" type="range" min="0" max="150" value="100" class="w-full"/>
+             </label>
+          </div>
+          <div id="orderedDitherControls" class="space-y-3 hidden pt-3 border-t border-slate-700">
+             <label class="block">
+               <span class="text-sm">Fuerza del Patrón: <span id="patternStrengthVal">50</span>%</span>
+               <input id="patternStrengthSlider" type="range" min="0" max="100" value="50" class="w-full"/>
+             </label>
+          </div>
+        </div>
+        
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-orange-300 mb-3">PRESETS</h2>
+          <div class="flex gap-2 mb-3">
+            <input id="presetNameInput" type="text" placeholder="Nombre" class="flex-grow bg-slate-700 p-2 rounded text-white text-sm">
+            <button id="savePresetBtn" class="px-3 py-2 bg-orange-600 rounded hover:bg-orange-500 text-sm">Guardar</button>
+          </div>
+          <div class="flex gap-2">
+            <select id="presetSelect" class="flex-grow bg-slate-700 p-2 rounded text-white text-sm">
+              <option value="">Cargar Preset...</option>
+            </select>
+            <button id="deletePresetBtn" class="px-3 py-2 bg-red-800 rounded hover:bg-red-700 text-sm">Borrar</button>
+          </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-bold text-yellow-300">ESTADÍSTICAS</h2>
+            <button id="metricsBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Métricas</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-center">
+            <div class="bg-slate-700 rounded p-2">
+              <div class="text-xs text-gray-400">FPS</div>
+              <div id="fps" class="text-xl font-bold text-green-400">--</div>
+            </div>
+            <div class="bg-slate-700 rounded p-2">
+              <div class="text-xs text-gray-400">ms/frame</div>
+              <div id="frameTime" class="text-xl font-bold text-cyan-400">--</div>
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-gray-400">
+            <div>Algoritmo: <span id="effectName" class="text-cyan-300">Floyd-Steinberg</span></div>
+            <div>Progreso: <span id="timeDisplay">00:00 / 00:00</span></div>
+            <div id="speedDisplay" class="hidden">Velocidad: <span class="text-yellow-300">1.00x</span></div>
+          </div>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg p-4">
+          <h2 class="font-bold text-red-300 mb-3 flex items-center gap-2">
+            EXPORTAR
+            <span id="recIndicator" class="hidden w-3 h-3 bg-red-500 rounded-full recording-indicator"></span>
+          </h2>
+          
+          <div class="mb-3">
+            <div class="text-xs text-gray-400 mb-2">Video WebM</div>
+            <div class="space-y-2 mb-2">
+              <div class="text-xs text-gray-400">Calidad/Tamaño:</div>
+              <div class="flex gap-1 text-xs" id="webmQualitySelector">
+                <button class="webm-quality-btn flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-quality="low">Baja</button>
+                <button class="webm-quality-btn flex-1 bg-cyan-600 px-2 py-1 rounded text-white" data-quality="medium">Media</button>
+                <button class="webm-quality-btn flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-quality="high">Alta</button>
+                <button class="webm-quality-btn flex-1 bg-slate-700 px-2 py-1 rounded hover:bg-slate-600" data-quality="ultra">Ultra</button>
+              </div>
+              <label class="flex items-center gap-2 cursor-pointer text-xs">
+                <input id="webmUseMarkersToggle" type="checkbox" class="w-4 h-4" checked/>
+                <span>Usar marcadores</span>
+              </label>
+            </div>
+            <button id="recBtn" class="w-full py-2 bg-red-600 rounded hover:bg-red-500 mb-2" disabled>Grabar WebM</button>
+            <button id="stopBtn" class="w-full py-2 bg-gray-700 rounded hover:bg-gray-600 hidden">Detener</button>
+          </div>
+          
+          <div id="gifExportPanel" class="mb-3 pt-3 border-t border-slate-700">
+            <div class="flex justify-between items-center mb-2">
+              <div class="text-xs text-gray-400">GIF Animado</div>
+              <div class="text-xs text-yellow-300" id="gifDimensionsEstimate">0x0 px</div>
+            </div>
+            <div class="space-y-2 mb-2">
+              <label class="block">
+                <span class="text-xs">Ancho (px): <span id="gifWidthVal">480</span></span>
+                <input id="gifWidthSlider" type="range" min="128" max="1024" value="480" class="w-full"/>
+              </label>
+              <label class="block">
+                <span class="text-xs">FPS: <span id="gifFpsVal">10</span></span>
+                <input id="gifFpsSlider" type="range" min="5" max="30" value="10" class="w-full"/>
+              </label>
+              <label class="block">
+                <span class="text-xs">Calidad (1=mejor): <span id="gifQualityVal">10</span></span>
+                <input id="gifQualitySlider" type="range" min="1" max="20" value="10" class="w-full"/>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer text-xs">
+                <input id="gifUseMarkersToggle" type="checkbox" class="w-4 h-4" checked/>
+                <span>Usar marcadores</span>
+              </label>
+            </div>
+            <button id="exportGifBtn" class="w-full py-2 bg-purple-600 rounded hover:bg-purple-500" disabled>Exportar GIF</button>
+            <div id="gifProgress" class="hidden">
+              <div class="text-xs text-gray-400 mt-2">GIF: <span id="gifProgressText">0%</span></div>
+              <div class="progress-bar-container">
+                <div class="progress-bar" id="gifProgressBar" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+          
+          <div id="spriteSheetPanel" class="mb-3 pt-3 border-t border-slate-700">
+            <div class="text-xs text-gray-400 mb-2">Sprite Sheet</div>
+            <div class="space-y-2 mb-2">
+              <label class="block">
+              <span class="text-xs">Columnas: <span id="spriteCols">8</span></span>
+                <input id="spriteColsSlider" type="range" min="4" max="16" value="8" class="w-full"/>
+              </label>
+              <label class="block">
+                <span class="text-xs">Frames: <span id="spriteFrameCount">30</span></span>
+                <input id="spriteFrameCountSlider" type="range" min="10" max="100" value="30" class="w-full"/>
+              </label>
+            </div>
+            <button id="exportSpriteBtn" class="w-full py-2 bg-pink-600 rounded hover:bg-pink-500" disabled>Exportar Sprite</button>
+          </div>
+          
+          <div class="pt-3 border-t border-slate-700">
+            <div class="text-xs text-gray-400 mb-2">Frame Actual</div>
+            <button id="downloadImageBtn" class="w-full py-2 bg-cyan-600 rounded hover:bg-cyan-500 mb-2">Exportar PNG</button>
+            <button id="exportSequenceBtn" class="w-full py-2 bg-teal-600 rounded hover:bg-teal-500 hidden" disabled>Secuencia PNG</button>
+          </div>
+          
+          <div id="status" class="text-xs text-gray-400 mt-3">Esperando...</div>
+        </div>
+      </div>
+    </aside>
+    
+    <main id="canvasContainer" class="flex-1 min-w-0 min-h-0 bg-black flex items-center justify-center p-4"></main>
+  </div>
+
+  <div id="shortcutsModal" class="shortcuts-modal">
+    <div class="shortcuts-content">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-cyan-400">Atajos de Teclado</h2>
+        <button id="closeShortcutsBtn" class="text-2xl hover:text-red-400">&times;</button>
+      </div>
+      <div class="space-y-2">
+        <div class="shortcut-item"><span>Play/Pause</span><span class="shortcut-key">ESPACIO</span></div>
+        <div class="shortcut-item"><span>Frame anterior</span><span class="shortcut-key">←</span></div>
+        <div class="shortcut-item"><span>Frame siguiente</span><span class="shortcut-key">→</span></div>
+        <div class="shortcut-item"><span>Marcar entrada</span><span class="shortcut-key">I</span></div>
+        <div class="shortcut-item"><span>Marcar salida</span><span class="shortcut-key">O</span></div>
+        <div class="shortcut-item"><span>Grabar</span><span class="shortcut-key">R</span></div>
+        <div class="shortcut-item"><span>Detener</span><span class="shortcut-key">S</span></div>
+        <div class="shortcut-item"><span>Exportar PNG</span><span class="shortcut-key">D</span></div>
+        <div class="shortcut-item"><span>Pantalla completa</span><span class="shortcut-key">F</span></div>
+        <div class="shortcut-item"><span>Métricas</span><span class="shortcut-key">M</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="metricsModal" class="metrics-modal">
+    <div class="metrics-content">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-cyan-400">Análisis de Métricas</h2>
+        <button id="closeMetricsBtn" class="text-2xl hover:text-red-400">&times;</button>
+      </div>
+      <div class="space-y-3">
+        <div class="metric-card">
+          <div class="metric-label">PSNR</div>
+          <div class="metric-value" id="metricPSNR">-- dB</div>
+          <div class="text-xs text-gray-400 mt-2">&gt;30dB = excelente</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">SSIM</div>
+          <div class="metric-value" id="metricSSIM">--</div>
+          <div class="text-xs text-gray-400 mt-2">0-1 (cercano a 1 = mejor)</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Compresión</div>
+          <div class="metric-value" id="metricCompression">--</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Paleta</div>
+          <div class="metric-value" id="metricPaletteSize">-- colores</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Tiempo</div>
+          <div class="metric-value" id="metricProcessTime">-- ms</div>
+        </div>
+      </div>
+      <button id="updateMetricsBtn" class="w-full mt-4 py-2 bg-cyan-600 rounded hover:bg-cyan-500">
+        Actualizar Métricas
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="js/app/pwa.js"></script>
+  <script type="module" src="js/app/main.js"></script>
+
+</body>
+</html>
