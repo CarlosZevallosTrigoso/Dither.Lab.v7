@@ -8,21 +8,70 @@
  * ============================================================================
  */
 import { KERNELS } from './constants.js';
-import { BlueNoiseLUT } from '../utils/optimizations.js';
 
 /**
- * Aplica ajustes de Brillo, Contraste, Saturación y Curvas a un array de píxeles.
+ * Aplica un filtro de nitidez (sharpen) a un array de píxeles.
+ * Esta función es ahora interna y se llama ANTES que otros ajustes.
+ */
+function applySharpening(pixels, width, height, strength) {
+    if (strength <= 0) return;
+
+    const kernel = [
+        [0, -1, 0],
+        [-1, 5, -1],
+        [0, -1, 0]
+    ];
+
+    const src = new Uint8ClampedArray(pixels); // Única copia de píxeles
+    const len = pixels.length;
+
+    for (let i = 0; i < len; i += 4) {
+        const x = (i / 4) % width;
+        const y = Math.floor((i / 4) / width);
+
+        if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
+            let sumR = 0, sumG = 0, sumB = 0;
+
+            for (let ky = -1; ky <= 1; ky++) {
+                for (let kx = -1; kx <= 1; kx++) {
+                    const idx = ((y + ky) * width + (x + kx)) * 4;
+                    const weight = kernel[ky + 1][kx + 1];
+                    sumR += src[idx] * weight;
+                    sumG += src[idx + 1] * weight;
+                    sumB += src[idx + 2] * weight;
+                }
+            }
+            const originalR = src[i];
+            const originalG = src[i + 1];
+            const originalB = src[i + 2];
+
+            pixels[i] = originalR * (1 - strength) + sumR * strength;
+            pixels[i + 1] = originalG * (1 - strength) + sumG * strength;
+            pixels[i + 2] = originalB * (1 - strength) + sumB * strength;
+        }
+    }
+}
+
+
+/**
+ * Aplica ajustes de Brillo, Contraste, Saturación, Curvas y Nitidez a un array de píxeles.
  * @param {Uint8ClampedArray} pixels - El array de píxeles del canvas (Ej: buffer.pixels).
  * @param {object} config - El objeto de configuración del estado de la aplicación.
+ * @param {number} width - El ancho del buffer de píxeles.
+ * @param {number} height - El alto del buffer de píxeles.
  */
-export function applyImageAdjustments(pixels, config) {
-    const { brightness, contrast, saturation, curvesLUTs } = config;
+export function applyImageAdjustments(pixels, config, width, height) {
+    // 1. Aplicar nitidez PRIMERO, sobre la imagen original
+    if (config.sharpeningStrength > 0) {
+        applySharpening(pixels, width, height, config.sharpeningStrength);
+    }
 
+    const { brightness, contrast, saturation, curvesLUTs } = config;
     const hasBasicAdjustments = brightness !== 0 || contrast !== 1.0 || saturation !== 1.0;
     const hasCurves = curvesLUTs && (curvesLUTs.rgb || curvesLUTs.r || curvesLUTs.g || curvesLUTs.b);
 
     if (!hasBasicAdjustments && !hasCurves) {
-        return; // No hay nada que hacer, salimos para optimizar
+        return; // No hay más ajustes que hacer
     }
 
     const len = pixels.length;
@@ -31,7 +80,6 @@ export function applyImageAdjustments(pixels, config) {
         let g = pixels[i + 1];
         let b = pixels[i + 2];
 
-        // 1. Ajustes básicos
         if (hasBasicAdjustments) {
             r = (r - 127.5) * contrast + 127.5 + brightness;
             g = (g - 127.5) * contrast + 127.5 + brightness;
@@ -43,13 +91,11 @@ export function applyImageAdjustments(pixels, config) {
                 g = luma + (g - luma) * saturation;
                 b = luma + (b - luma) * saturation;
             }
-            // Clamp (asegurar que los valores estén entre 0 y 255) solo para ajustes básicos
             r = Math.max(0, Math.min(255, r));
             g = Math.max(0, Math.min(255, g));
             b = Math.max(0, Math.min(255, b));
         }
 
-        // 2. Aplicar Curvas (no necesitan clamp, la LUT ya está en el rango 0-255)
         if (hasCurves) {
             if (curvesLUTs.rgb) {
                 r = curvesLUTs.rgb[Math.round(r)];
@@ -67,16 +113,7 @@ export function applyImageAdjustments(pixels, config) {
     }
 }
 
-export function drawPosterize(p, buffer, src, config, lumaLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-
-    const pixels = buffer.pixels;
-    applyImageAdjustments(pixels, config);
-
+export function drawPosterize(pixels, config, lumaLUT) {
     const len = pixels.length;
     const levels = config.colorCount;
     const step = 255 / (levels > 1 ? levels - 1 : 1);
@@ -96,19 +133,9 @@ export function drawPosterize(p, buffer, src, config, lumaLUT) {
             pixels[i + 2] = b;
         }
     }
-    buffer.updatePixels();
 }
 
-export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
+export function drawDither(pix, config, lumaLUT, bayerLUT, pw, ph) {
     if (config.useOriginalColor) {
         const levels = config.colorCount;
         const step = 255 / (levels > 1 ? levels - 1 : 1);
@@ -123,22 +150,14 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
 
             for (let x = xStart; x !== xEnd; x += xStep) {
                 const i = (y * pw + x) * 4;
-                const oldR = pix[i];
-                const oldG = pix[i + 1];
-                const oldB = pix[i + 2];
-
+                const oldR = pix[i], oldG = pix[i + 1], oldB = pix[i + 2];
                 const newR = Math.round(oldR / step) * step;
                 const newG = Math.round(oldG / step) * step;
                 const newB = Math.round(oldB / step) * step;
 
-                pix[i] = newR;
-                pix[i + 1] = newG;
-                pix[i + 2] = newB;
+                pix[i] = newR; pix[i + 1] = newG; pix[i + 2] = newB;
 
-                let errR = oldR - newR;
-                let errG = oldG - newG;
-                let errB = oldB - newB;
-                
+                let errR = oldR - newR, errG = oldG - newG, errB = oldB - newB;
                 const strength = config.diffusionStrength;
                 const gamma = config.errorGamma;
                 errR = Math.pow(Math.abs(errR / 255), gamma) * 255 * Math.sign(errR) * strength;
@@ -147,9 +166,7 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
 
                 for (const pt of kernel.points) {
                     const dx = isReversed ? -pt.dx : pt.dx;
-                    const nx = x + dx;
-                    const ny = y + pt.dy;
-
+                    const nx = x + dx, ny = y + pt.dy;
                     if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
                         const ni = (ny * pw + nx) * 4;
                         const weight = pt.w / kernel.divisor;
@@ -165,123 +182,75 @@ export function drawDither(p, buffer, src, config, lumaLUT, bayerLUT) {
             const levels = config.colorCount;
             const baseStrength = 255 / levels;
             const ditherStrength = baseStrength * config.patternStrength * 2;
-
             for (let y = 0; y < ph; y++) {
                 for (let x = 0; x < pw; x++) {
                     const i = (y * pw + x) * 4;
                     const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
                     const ditherOffset = bayerLUT.get(x, y) * ditherStrength;
-                    
                     const mixRatio = config.patternMix;
                     const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
-                    
                     const [r, g, b] = lumaLUT.map(mixedLuma);
-                    pix[i] = r;
-                    pix[i + 1] = g;
-                    pix[i + 2] = b;
+                    pix[i] = r; pix[i + 1] = g; pix[i + 2] = b;
                 }
             }
         } else {
             const kernel = KERNELS[config.effect];
             if (!kernel) return;
-            
             const lumaBuffer = new Float32Array(pw * ph);
             for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
                 lumaBuffer[j] = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
             }
-
             const levels = config.colorCount;
             const step = 255 / (levels > 1 ? levels - 1 : 1);
-            
             for (let y = 0; y < ph; y++) {
                 const isReversed = config.serpentineScan && y % 2 === 1;
                 const xStart = isReversed ? pw - 1 : 0;
                 const xEnd = isReversed ? -1 : pw;
                 const xStep = isReversed ? -1 : 1;
-
                 for (let x = xStart; x !== xEnd; x += xStep) {
                     const lumaIndex = y * pw + x;
                     const pixIndex = lumaIndex * 4;
-                    
                     const noise = (Math.random() * 2 - 1) * config.diffusionNoise;
                     const oldLuma = lumaBuffer[lumaIndex] + noise;
-                    
                     const newLuma = Math.round(oldLuma / step) * step;
                     const [r, g, b] = lumaLUT.map(newLuma);
-
-                    pix[pixIndex] = r;
-                    pix[pixIndex + 1] = g;
-                    pix[pixIndex + 2] = b;
-
+                    pix[pixIndex] = r; pix[pixIndex + 1] = g; pix[pixIndex + 2] = b;
                     let err = oldLuma - newLuma;
-                    
                     const strength = config.diffusionStrength;
                     const gamma = config.errorGamma;
                     const finalError = Math.pow(Math.abs(err / 255), gamma) * 255 * Math.sign(err) * strength;
-
                     for (const pt of kernel.points) {
                         const dx = isReversed ? -pt.dx : pt.dx;
-                        const nx = x + dx;
-                        const ny = y + pt.dy;
-
+                        const nx = x + dx, ny = y + pt.dy;
                         if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
-                            const neighborIndex = ny * pw + nx;
-                            const weight = pt.w / kernel.divisor;
-                            lumaBuffer[neighborIndex] += finalError * weight;
+                            lumaBuffer[ny * pw + nx] += finalError * (pt.w / kernel.divisor);
                         }
                     }
                 }
             }
         }
     }
-    buffer.updatePixels();
 }
 
-
-export function drawBlueNoise(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-    
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-    
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
+export function drawBlueNoise(pix, config, lumaLUT, blueNoiseLUT, pw, ph) {
     const levels = config.colorCount;
     const baseStrength = 255 / levels;
     const ditherStrength = baseStrength * config.patternStrength * 2;
-    
     for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
             const i = (y * pw + x) * 4;
             const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
             const ditherOffset = blueNoiseLUT.get(x, y) * ditherStrength;
-
             const mixRatio = config.patternMix;
             const mixedLuma = luma * (1 - mixRatio) + (luma + ditherOffset) * mixRatio;
-
             const [r, g, b] = lumaLUT.map(mixedLuma);
-            pix[i] = r;
-            pix[i + 1] = g;
-            pix[i + 2] = b;
+            pix[i] = r; pix[i + 1] = g; pix[i + 2] = b;
         }
     }
-    buffer.updatePixels();
 }
 
-export function drawVariableError(p, buffer, src, config, lumaLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
+export function drawVariableError(pix, config, lumaLUT, pw, ph) {
     const kernel = KERNELS['floyd-steinberg'];
-
     const gradients = new Float32Array(pw * ph);
     for (let y = 1; y < ph - 1; y++) {
         for (let x = 1; x < pw - 1; x++) {
@@ -294,258 +263,128 @@ export function drawVariableError(p, buffer, src, config, lumaLUT) {
             gradients[y * pw + x] = (gx + gy) / 255;
         }
     }
-      
     for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
             const i = (y * pw + x) * 4;
             const gradient = gradients[y * pw + x] || 0;
             const adaptiveStrength = config.diffusionStrength * (1 - gradient * 0.75);
-            
             const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
             const step = 255 / (config.colorCount > 1 ? config.colorCount - 1 : 1);
             const newLuma = Math.round(oldLuma / step) * step;
             const [r, g, b] = lumaLUT.map(newLuma);
-            
-            pix[i] = r;
-            pix[i + 1] = g;
-            pix[i + 2] = b;
-            
+            pix[i] = r; pix[i + 1] = g; pix[i + 2] = b;
             const err = (oldLuma - newLuma) * adaptiveStrength;
-            
             for (const pt of kernel.points) {
-                const nx = x + pt.dx;
-                const ny = y + pt.dy;
-                
+                const nx = x + pt.dx, ny = y + pt.dy;
                 if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
                     const ni = (ny * pw + nx) * 4;
                     const weight = pt.w / kernel.divisor;
                     const adjustment = err * weight;
-                    pix[ni] = Math.min(255, Math.max(0, pix[ni] + adjustment));
-                    pix[ni + 1] = Math.min(255, Math.max(0, pix[ni + 1] + adjustment));
-                    pix[ni + 2] = Math.min(255, Math.max(0, pix[ni + 2] + adjustment));
+                    pix[ni] += adjustment; pix[ni + 1] += adjustment; pix[ni + 2] += adjustment;
                 }
             }
         }
     }
-  
-  buffer.updatePixels();
 }
 
-export function drawOstromoukhovDither(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
+export function drawOstromoukhovDither(pix, config, lumaLUT, blueNoiseLUT, pw, ph) {
     const kernel = KERNELS['floyd-steinberg'];
     const levels = config.colorCount;
     const step = 255 / (levels > 1 ? levels - 1 : 1);
-
     for (let y = 0; y < ph; y++) {
         const isReversed = config.serpentineScan && y % 2 === 1;
         const xStart = isReversed ? pw - 1 : 0;
         const xEnd = isReversed ? -1 : pw;
         const xStep = isReversed ? -1 : 1;
-
         for (let x = xStart; x !== xEnd; x += xStep) {
             const i = (y * pw + x) * 4;
             const oldLuma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-            
             const noise = (blueNoiseLUT.get(x, y) + 0.5);
             const variableThreshold = step / 2 * (1 + (noise - 0.5) * 0.5);
             const newLuma = (oldLuma > variableThreshold) ? Math.ceil(oldLuma / step) * step : Math.floor(oldLuma / step) * step;
-
             const [r, g, b] = lumaLUT.map(Math.min(255, Math.max(0, newLuma)));
-            
-            pix[i] = r;
-            pix[i + 1] = g;
-            pix[i + 2] = b;
-
+            pix[i] = r; pix[i + 1] = g; pix[i + 2] = b;
             const err = (oldLuma - newLuma) * config.diffusionStrength;
-
             for (const pt of kernel.points) {
                 const dx = isReversed ? -pt.dx : pt.dx;
-                const nx = x + dx;
-                const ny = y + pt.dy;
-
+                const nx = x + dx, ny = y + pt.dy;
                 if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
                     const ni = (ny * pw + nx) * 4;
                     const weight = pt.w / kernel.divisor;
                     const adjustment = err * weight;
-                    pix[ni] += adjustment;
-                    pix[ni + 1] += adjustment;
-                    pix[ni + 2] += adjustment;
+                    pix[ni] += adjustment; pix[ni + 1] += adjustment; pix[ni + 2] += adjustment;
                 }
             }
         }
     }
-    buffer.updatePixels();
 }
 
-export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-    
+export function drawRiemersmaDither(pix, config, lumaLUT, pw, ph) {
     const gray = new Float32Array(pw * ph);
     for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
         gray[j] = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
     }
-
     function d2xy(n, d) {
         let x = 0, y = 0;
         for (let s = 1; s < n; s *= 2) {
-            const rx = 1 & (d >> 1);
-            const ry = 1 & (d ^ rx);
+            const rx = 1 & (d >> 1), ry = 1 & (d ^ rx);
             if (ry === 0) {
-                if (rx === 1) {
-                    x = s - 1 - x;
-                    y = s - 1 - y;
-                }
+                if (rx === 1) { x = s - 1 - x; y = s - 1 - y; }
                 [x, y] = [y, x];
             }
-            x += s * rx;
-            y += s * ry;
-            d >>= 2;
+            x += s * rx; y += s * ry; d >>= 2;
         }
         return {x, y};
     }
-
     const side = Math.pow(2, Math.ceil(Math.log2(Math.max(pw, ph))));
     const errorHistory = new Float32Array(16).fill(0);
-    
     for (let i = 0; i < side * side; i++) {
         const {x, y} = d2xy(side, i);
         if (x >= pw || y >= ph) continue;
-
         const idx = y * pw + x;
         const originalValue = gray[idx];
-        
         let totalError = 0;
         totalError += errorHistory[0] * (1/2);
         totalError += errorHistory[1] * (1/4);
         totalError += errorHistory[3] * (1/8);
         totalError += errorHistory[7] * (1/16);
-
         const currentValue = originalValue + totalError * config.diffusionStrength;
-        
         const step = 255 / (config.colorCount > 1 ? config.colorCount - 1 : 1);
         const newValue = Math.round(currentValue / step) * step;
         const error = currentValue - newValue;
-        
         errorHistory.copyWithin(1, 0);
         errorHistory[0] = error;
-
         const [r, g, b] = lumaLUT.map(newValue);
         const pixIdx = idx * 4;
-        pix[pixIdx] = r;
-        pix[pixIdx + 1] = g;
-        pix[pixIdx + 2] = b;
+        pix[pixIdx] = r; pix[pixIdx + 1] = g; pix[pixIdx + 2] = b;
     }
-
-    buffer.updatePixels();
 }
 
 export function drawHalftoneDither(p, buffer, src, config) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    const tempBuffer = p.createGraphics(pw, ph);
-    tempBuffer.pixelDensity(1);
-    tempBuffer.image(src, 0, 0, pw, ph);
-    tempBuffer.loadPixels();
-    applyImageAdjustments(tempBuffer.pixels, config);
-
+    const pw = buffer.width, ph = buffer.height;
+    const tempPixels = src.pixels; // Usamos los píxeles ya ajustados
     buffer.background(255);
     buffer.noStroke();
     buffer.fill(0);
-
     const cellSize = config.halftoneSize;
     const k = cellSize / 255;
-    const tempPixels = tempBuffer.pixels;
-
     for (let y = 0; y < ph; y += cellSize) {
         for (let x = 0; x < pw; x += cellSize) {
-            
-            let totalLuma = 0;
-            let pixelCount = 0;
+            let totalLuma = 0, pixelCount = 0;
             for (let j = 0; j < cellSize; j++) {
                 for (let i = 0; i < cellSize; i++) {
-                    const px = x + i;
-                    const py = y + j;
+                    const px = x + i, py = y + j;
                     if (px < pw && py < ph) {
                         const pixIndex = (py * pw + px) * 4;
-                        const r = tempPixels[pixIndex];
-                        const g = tempPixels[pixIndex + 1];
-                        const b = tempPixels[pixIndex + 2];
+                        const r = tempPixels[pixIndex], g = tempPixels[pixIndex + 1], b = tempPixels[pixIndex + 2];
                         totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
                         pixelCount++;
                     }
                 }
             }
             const avgLuma = pixelCount > 0 ? totalLuma / pixelCount : 0;
-
             const dotSize = (255 - avgLuma) * k;
             buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
-        }
-    }
-    tempBuffer.remove();
-}
-
-/**
- * Aplica un filtro de nitidez (sharpen) manual a un array de píxeles.
- * @param {Uint8ClampedArray} pixels - El array de píxeles del canvas (p.pixels).
- * @param {number} width - El ancho del canvas.
- * @param {number} height - El alto del canvas.
- * @param {number} strength - La fuerza del efecto (0.0 a 1.0).
- */
-export function applySharpening(pixels, width, height, strength) {
-    if (strength <= 0) return;
-
-    const kernel = [
-        [0, -1, 0],
-        [-1, 5, -1],
-        [0, -1, 0]
-    ];
-
-    const src = new Uint8ClampedArray(pixels);
-    const len = pixels.length;
-
-    for (let i = 0; i < len; i += 4) {
-        const x = (i / 4) % width;
-        const y = Math.floor((i / 4) / width);
-
-        if (x > 0 && x < width - 1 && y > 0 && y < height - 1) {
-            let sumR = 0;
-            let sumG = 0;
-            let sumB = 0;
-
-            for (let ky = -1; ky <= 1; ky++) {
-                for (let kx = -1; kx <= 1; kx++) {
-                    const idx = ((y + ky) * width + (x + kx)) * 4;
-                    const weight = kernel[ky + 1][kx + 1];
-                    sumR += src[idx] * weight;
-                    sumG += src[idx + 1] * weight;
-                    sumB += src[idx + 2] * weight;
-                }
-            }
-
-            const originalR = src[i];
-            const originalG = src[i + 1];
-            const originalB = src[i + 2];
-
-            pixels[i] = originalR * (1 - strength) + sumR * strength;
-            pixels[i + 1] = originalG * (1 - strength) + sumG * strength;
-            pixels[i + 2] = originalB * (1 - strength) + sumB * strength;
         }
     }
 }
