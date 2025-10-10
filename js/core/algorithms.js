@@ -378,35 +378,11 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
     const pix = buffer.pixels;
     applyImageAdjustments(pix, config);
     
-    // Convertir a escala de grises para el procesamiento
     const gray = new Float32Array(pw * ph);
     for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
         gray[j] = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
     }
 
-    const curvePoints = [];
-    const n = Math.max(pw, ph);
-    const order = Math.ceil(Math.log2(n));
-
-    function hilbert(x, y, size, iter) {
-        if (iter === 0) {
-            if (x < pw && y < ph) curvePoints.push({x, y});
-            return;
-        }
-        const sub = size / 2;
-        // Rotaciones y recursión para generar la curva
-        if (x < sub && y < sub) { // Cuadrante inferior izquierdo
-            hilbert(y, x, sub, iter - 1);
-        } else if (x < sub && y >= sub) { // Cuadrante superior izquierdo
-            hilbert(x, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px, y: py + sub}));
-        } else if (x >= sub && y >= sub) { // Cuadrante superior derecho
-            hilbert(x - sub, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px + sub, y: py + sub}));
-        } else { // Cuadrante inferior derecho
-            hilbert(sub - 1 - y, size - 1 - x, sub, iter - 1, (px, py) => curvePoints.push({x: size - 1 - py, y: sub - 1 - px}));
-        }
-    }
-    
-    // Simplificación para generar la curva (una versión más sencilla y directa)
     function d2xy(n, d) {
         let x = 0, y = 0;
         for (let s = 1; s < n; s *= 2) {
@@ -436,7 +412,6 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
         const idx = y * pw + x;
         const originalValue = gray[idx];
         
-        // Sumar el error ponderado de los píxeles anteriores en la curva
         let totalError = 0;
         totalError += errorHistory[0] * (1/2);
         totalError += errorHistory[1] * (1/4);
@@ -449,7 +424,6 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
         const newValue = Math.round(currentValue / step) * step;
         const error = currentValue - newValue;
         
-        // Actualizar el historial de errores
         errorHistory.copyWithin(1, 0);
         errorHistory[0] = error;
 
@@ -460,44 +434,6 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
         pix[pixIdx + 2] = b;
     }
 
-    buffer.updatePixels();
-}
-
-// ============================================================================
-// ========= NUEVOS ALGORITMOS AÑADIDOS Y CORREGIDOS ==========================
-// ============================================================================
-
-export function drawSpiralDither(p, buffer, src, config, lumaLUT, spiralLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
-    const levels = config.colorCount;
-    const baseStrength = 255 / (levels > 1 ? levels - 1 : 1);
-    
-    // =================================================================
-    // ========= INICIO DE LA CORRECCIÓN DE `Spiral Dither` =========
-    // =================================================================
-    const ditherStrength = baseStrength * config.patternStrength * 0.8;
-    // =================================================================
-    // =========== FIN DE LA CORRECCIÓN DE `Spiral Dither` ============
-    // =================================================================
-
-    for (let y = 0; y < ph; y++) {
-        for (let x = 0; x < pw; x++) {
-            const i = (y * pw + x) * 4;
-            const ditherOffset = spiralLUT.get(x, y) * ditherStrength;
-            const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-            const adjustedLuma = luma + ditherOffset;
-            const [r, g, b] = lumaLUT.map(adjustedLuma);
-            pix[i] = r;
-            pix[i + 1] = g;
-            pix[i + 2] = b;
-        }
-    }
     buffer.updatePixels();
 }
 
@@ -514,11 +450,7 @@ export function drawHalftoneDither(p, buffer, src, config) {
     buffer.background(255);
     buffer.noStroke();
     buffer.fill(0);
-    
-    // =================================================================
-    // ========= INICIO DE LA MEJORA DE `Halftone Dither` =========
-    // =================================================================
-    // Usamos ditherScale para el tamaño de la celda (mínimo 2 para que se vea)
+
     const cellSize = Math.max(2, config.ditherScale);
     const k = cellSize / 255;
     const tempPixels = tempBuffer.pixels;
@@ -526,7 +458,6 @@ export function drawHalftoneDither(p, buffer, src, config) {
     for (let y = 0; y < ph; y += cellSize) {
         for (let x = 0; x < pw; x += cellSize) {
             
-            // --- Lógica para promediar la luma de la celda ---
             let totalLuma = 0;
             let pixelCount = 0;
             for (let j = 0; j < cellSize; j++) {
@@ -543,126 +474,11 @@ export function drawHalftoneDither(p, buffer, src, config) {
                     }
                 }
             }
-            const avgLuma = totalLuma / pixelCount;
-            // --- Fin de la nueva lógica ---
+            const avgLuma = pixelCount > 0 ? totalLuma / pixelCount : 0;
 
             const dotSize = (255 - avgLuma) * k;
             buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
         }
     }
-    // =================================================================
-    // =========== FIN DE LA MEJORA DE `Halftone Dither` ============
-    // =================================================================
     tempBuffer.remove();
-}
-
-let patternSet = null;
-
-function generatePatterns(p, size = 8, levels = 16) {
-    if (patternSet && patternSet.length === levels) return patternSet;
-
-    console.log("Generando patrones de tramado...");
-    const patterns = [];
-    const blueNoise = new BlueNoiseLUT();
-
-    for (let i = 0; i < levels; i++) {
-        const pattern = p.createGraphics(size, size);
-        pattern.pixelDensity(1);
-        pattern.background(255);
-        pattern.noStroke();
-        pattern.fill(0);
-
-        const threshold = i / (levels - 1);
-        
-        for(let y = 0; y < size; y++) {
-            for(let x = 0; x < size; x++) {
-                const noise = blueNoise.get(x, y) + 0.5;
-                if (noise > threshold) {
-                    pattern.point(x, y);
-                }
-            }
-        }
-        patterns.push(pattern);
-    }
-    patternSet = patterns.reverse();
-    return patternSet;
-}
-
-export function drawPatternDither(p, buffer, src, config) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    const patternSize = 8;
-    const patterns = generatePatterns(p, patternSize, 16);
-    const numPatterns = patterns.length;
-
-    const tempBuffer = p.createGraphics(pw, ph);
-    tempBuffer.pixelDensity(1);
-    tempBuffer.image(src, 0, 0, pw, ph);
-    tempBuffer.loadPixels();
-    applyImageAdjustments(tempBuffer.pixels, config);
-
-    buffer.background(255);
-
-    for (let y = 0; y < ph; y += patternSize) {
-        for (let x = 0; x < pw; x += patternSize) {
-            
-            // =================================================================
-            // ========= INICIO DE LA CORRECCIÓN DE `Pattern Dither` =========
-            // =================================================================
-            let totalLuma = 0;
-            const tempPixels = tempBuffer.pixels;
-            for (let j = 0; j < patternSize; j++) {
-                for (let i = 0; i < patternSize; i++) {
-                    const px = x + i;
-                    const py = y + j;
-                    if (px < pw && py < ph) {
-                        const pixIndex = (py * pw + px) * 4;
-                        const r = tempPixels[pixIndex];
-                        const g = tempPixels[pixIndex + 1];
-                        const b = tempPixels[pixIndex + 2];
-                        totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
-                    }
-                }
-            }
-            const avgLuma = totalLuma / (patternSize * patternSize);
-            // =================================================================
-            // =========== FIN DE LA CORRECCIÓN DE `Pattern Dither` ============
-            // =================================================================
-
-            const patternIndex = Math.min(
-                numPatterns - 1,
-                Math.floor(avgLuma / 256 * numPatterns)
-            );
-
-            buffer.image(patterns[patternIndex], x, y);
-        }
-    }
-    tempBuffer.remove();
-}
-
-export function drawDotSpacingDither(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-
-    buffer.image(src, 0, 0, pw, ph);
-    buffer.loadPixels();
-    const pix = buffer.pixels;
-    applyImageAdjustments(pix, config);
-
-    buffer.background(255);
-    buffer.noStroke();
-    buffer.fill(0);
-
-    for (let y = 0; y < ph; y++) {
-        for (let x = 0; x < pw; x++) {
-            const i = (y * pw + x) * 4;
-            const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-            const threshold = (blueNoiseLUT.get(x, y) + 0.5) * 255;
-
-            if (luma < threshold) {
-                buffer.rect(x, y, 1, 1);
-            }
-        }
-    }
 }
