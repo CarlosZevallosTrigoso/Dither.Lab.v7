@@ -8,6 +8,7 @@
  * ============================================================================
  */
 import { KERNELS } from './constants.js';
+import { BlueNoiseLUT } from '../utils/optimizations.js';
 
 /**
  * Aplica ajustes de Brillo, Contraste, Saturación y Curvas a un array de píxeles.
@@ -497,26 +498,21 @@ export function drawHalftoneDither(p, buffer, src, config) {
     const pw = buffer.width;
     const ph = buffer.height;
 
-    // Usamos un buffer temporal para aplicar los ajustes de imagen una sola vez
     const tempBuffer = p.createGraphics(pw, ph);
     tempBuffer.pixelDensity(1);
     tempBuffer.image(src, 0, 0, pw, ph);
     tempBuffer.loadPixels();
     applyImageAdjustments(tempBuffer.pixels, config);
-    // No necesitamos updatePixels() ya que leeremos con get()
 
-    buffer.background(255); // Fondo blanco para el semitono
+    buffer.background(255);
     buffer.noStroke();
-    buffer.fill(0); // Puntos negros
+    buffer.fill(0);
 
-    // El tamaño de celda podría ser un parámetro en `config` en el futuro
     const cellSize = 8;
-    const k = cellSize / 255; // Factor de escala para el tamaño del punto
+    const k = cellSize / 255;
 
     for (let y = 0; y < ph; y += cellSize) {
         for (let x = 0; x < pw; x += cellSize) {
-            // Usar get() para tomar un color promedio del área es simple pero lento.
-            // Una optimización sería calcular la luminancia promedio del bloque manualmente.
             const c = tempBuffer.get(x + cellSize / 2, y + cellSize / 2);
             const luma = (p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114);
 
@@ -524,30 +520,101 @@ export function drawHalftoneDither(p, buffer, src, config) {
             buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
         }
     }
-    tempBuffer.remove(); // Liberar memoria
+    tempBuffer.remove();
 }
 
-// --- Marcadores de posición para futuros algoritmos ---
+let patternSet = null;
 
-export function drawPatternDither(p, buffer, src, config, lumaLUT) {
-    // Lógica futura:
-    // 1. Crear un set de patrones (p.ej. 8x8 p5.Graphics) para 16 niveles de gris.
-    // 2. Procesar la imagen de entrada con applyImageAdjustments.
-    // 3. Iterar sobre la imagen en bloques de 8x8.
-    // 4. Calcular la luminancia promedio de cada bloque.
-    // 5. Mapear esa luminancia al patrón más cercano.
-    // 6. Dibujar (image()) el patrón correspondiente en el buffer de salida.
-    console.warn("Pattern Dithering no implementado aún.");
-    buffer.image(src, 0, 0, buffer.width, buffer.height); // Mostrar original como fallback
+function generatePatterns(p, size = 8, levels = 16) {
+    if (patternSet && patternSet.length === levels) return patternSet;
+
+    console.log("Generando patrones de tramado...");
+    const patterns = [];
+    const blueNoise = new BlueNoiseLUT();
+
+    for (let i = 0; i < levels; i++) {
+        const pattern = p.createGraphics(size, size);
+        pattern.pixelDensity(1);
+        pattern.background(255);
+        pattern.noStroke();
+        pattern.fill(0);
+
+        const threshold = i / (levels - 1);
+        
+        for(let y = 0; y < size; y++) {
+            for(let x = 0; x < size; x++) {
+                const noise = blueNoise.get(x, y) + 0.5;
+                if (noise > threshold) {
+                    pattern.point(x, y);
+                }
+            }
+        }
+        patterns.push(pattern);
+    }
+    patternSet = patterns.reverse();
+    return patternSet;
 }
 
-export function drawDotSpacingDither(p, buffer, src, config, lumaLUT) {
-    // Lógica futura:
-    // 1. Procesar la imagen de entrada con applyImageAdjustments y convertir a escala de grises.
-    // 2. Iterar sobre los píxeles.
-    // 3. La luminancia de cada píxel (invertida, 0=negro, 255=blanco) se convierte en una probabilidad (0 a 1).
-    // 4. Usar `if (Math.random() < probability)` para decidir si dibujar un punto en esa coordenada.
-    // 5. Una mejora sería usar un algoritmo de muestreo Poisson-disc para un espaciado más natural.
-    console.warn("Dot Spacing Dithering no implementado aún.");
-    buffer.image(src, 0, 0, buffer.width, buffer.height); // Mostrar original como fallback
+export function drawPatternDither(p, buffer, src, config) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    const patternSize = 8;
+    const patterns = generatePatterns(p, patternSize, 16);
+    const numPatterns = patterns.length;
+
+    const tempBuffer = p.createGraphics(pw, ph);
+    tempBuffer.pixelDensity(1);
+    tempBuffer.image(src, 0, 0, pw, ph);
+    tempBuffer.loadPixels();
+    applyImageAdjustments(tempBuffer.pixels, config);
+
+    buffer.background(255);
+
+    for (let y = 0; y < ph; y += patternSize) {
+        for (let x = 0; x < pw; x += patternSize) {
+            let totalLuma = 0;
+            for (let j = 0; j < patternSize; j++) {
+                for (let i = 0; i < patternSize; i++) {
+                    const c = tempBuffer.get(x + i, y + j);
+                    totalLuma += (p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114);
+                }
+            }
+            const avgLuma = totalLuma / (patternSize * patternSize);
+
+            const patternIndex = Math.min(
+                numPatterns - 1,
+                Math.floor(avgLuma / 256 * numPatterns)
+            );
+
+            buffer.image(patterns[patternIndex], x, y);
+        }
+    }
+    tempBuffer.remove();
+}
+
+export function drawDotSpacingDither(p, buffer, src, config, lumaLUT, blueNoiseLUT) {
+    const pw = buffer.width;
+    const ph = buffer.height;
+
+    buffer.image(src, 0, 0, pw, ph);
+    buffer.loadPixels();
+    const pix = buffer.pixels;
+    applyImageAdjustments(pix, config);
+
+    buffer.background(255);
+    buffer.noStroke();
+    buffer.fill(0);
+
+    for (let y = 0; y < ph; y++) {
+        for (let x = 0; x < pw; x++) {
+            const i = (y * pw + x) * 4;
+            const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
+            const threshold = (blueNoiseLUT.get(x, y) + 0.5) * 255;
+
+            if (luma < threshold) {
+                buffer.rect(x, y, 1, 1);
+            }
+        }
+    }
 }
