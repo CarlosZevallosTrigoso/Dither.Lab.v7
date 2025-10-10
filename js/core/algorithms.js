@@ -378,11 +378,35 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
     const pix = buffer.pixels;
     applyImageAdjustments(pix, config);
     
+    // Convertir a escala de grises para el procesamiento
     const gray = new Float32Array(pw * ph);
     for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
         gray[j] = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
     }
 
+    const curvePoints = [];
+    const n = Math.max(pw, ph);
+    const order = Math.ceil(Math.log2(n));
+
+    function hilbert(x, y, size, iter) {
+        if (iter === 0) {
+            if (x < pw && y < ph) curvePoints.push({x, y});
+            return;
+        }
+        const sub = size / 2;
+        // Rotaciones y recursión para generar la curva
+        if (x < sub && y < sub) { // Cuadrante inferior izquierdo
+            hilbert(y, x, sub, iter - 1);
+        } else if (x < sub && y >= sub) { // Cuadrante superior izquierdo
+            hilbert(x, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px, y: py + sub}));
+        } else if (x >= sub && y >= sub) { // Cuadrante superior derecho
+            hilbert(x - sub, y - sub, sub, iter - 1, (px, py) => curvePoints.push({x: px + sub, y: py + sub}));
+        } else { // Cuadrante inferior derecho
+            hilbert(sub - 1 - y, size - 1 - x, sub, iter - 1, (px, py) => curvePoints.push({x: size - 1 - py, y: sub - 1 - px}));
+        }
+    }
+    
+    // Simplificación para generar la curva (una versión más sencilla y directa)
     function d2xy(n, d) {
         let x = 0, y = 0;
         for (let s = 1; s < n; s *= 2) {
@@ -412,6 +436,7 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
         const idx = y * pw + x;
         const originalValue = gray[idx];
         
+        // Sumar el error ponderado de los píxeles anteriores en la curva
         let totalError = 0;
         totalError += errorHistory[0] * (1/2);
         totalError += errorHistory[1] * (1/4);
@@ -424,6 +449,7 @@ export function drawRiemersmaDither(p, buffer, src, config, lumaLUT) {
         const newValue = Math.round(currentValue / step) * step;
         const error = currentValue - newValue;
         
+        // Actualizar el historial de errores
         errorHistory.copyWithin(1, 0);
         errorHistory[0] = error;
 
