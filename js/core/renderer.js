@@ -69,7 +69,9 @@ export function sketch(p) {
 
         // Manejador para cuando el worker nos devuelve los píxeles procesados
         ditherWorker.onmessage = (e) => {
-            const { imageData } = e.data;
+            // ========= CORRECCIÓN APLICADA AQUÍ =========
+            const imageData = e.data;
+            // ===========================================
             const buffer = bufferPool.get(imageData.width, imageData.height, p);
             buffer.drawingContext.putImageData(imageData, 0, 0);
             
