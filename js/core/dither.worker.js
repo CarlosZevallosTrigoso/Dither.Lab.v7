@@ -1,9 +1,10 @@
 /**
  * ============================================================================
- * DitherLab v7 - Dithering Web Worker (VERSIÓN CORREGIDA)
+ * DitherLab v7 - Dithering Web Worker (VERSIÓN CON LÓGICA DE COLOR CORREGIDA)
  * ============================================================================
- * - Corregido el error TypeError en postMessage.
- * - Se asegura el formato correcto para transferir el objeto ImageData.
+ * - Reescrita la lógica para 'useOriginalColor' para que aplique la difusión
+ * de error a cada canal de color (R, G, B) correctamente.
+ * - Asegura que todos los algoritmos se comporten como se espera con dicha opción.
  * ============================================================================
  */
 
@@ -25,35 +26,87 @@ for (let i = 0; i < 16; i++) {
     bayerMatrix[i] = (BAYER_4x4[Math.floor(i / 4)][i % 4] / 16.0 - 0.5);
 }
 
-// Lógica de los algoritmos
-function drawPosterize(pixels, config, lumaLUT) {
+function mapLuma(luma, lumaLUT) {
+    const index = Math.max(0, Math.min(Math.floor(luma), 255));
+    const pos = index * 3;
+    return [lumaLUT[pos], lumaLUT[pos + 1], lumaLUT[pos + 2]];
+}
+
+function drawPosterize(pixels, config) {
     const len = pixels.length;
     const levels = config.colorCount;
     const step = 255 / (levels > 1 ? levels - 1 : 1);
-    if (config.useOriginalColor) {
-        for (let i = 0; i < len; i += 4) {
-            pixels[i] = Math.round(pixels[i] / step) * step;
-            pixels[i + 1] = Math.round(pixels[i + 1] / step) * step;
-            pixels[i + 2] = Math.round(pixels[i + 2] / step) * step;
-        }
-    } else {
-        for (let i = 0; i < len; i += 4) {
-            const luma = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
-            const [r, g, b] = mapLuma(luma, lumaLUT);
-            pixels[i] = r; pixels[i + 1] = g; pixels[i + 2] = b;
-        }
+
+    for (let i = 0; i < len; i += 4) {
+        pixels[i] = Math.round(pixels[i] / step) * step;
+        pixels[i+1] = Math.round(pixels[i+1] / step) * step;
+        pixels[i+2] = Math.round(pixels[i+2] / step) * step;
     }
 }
 
 function drawDither(pix, config, lumaLUT, pw, ph) {
     const kernel = KERNELS[config.effect];
-    if (!kernel && config.effect !== 'bayer') return;
+    const isBayer = config.effect === 'bayer';
+    if (!kernel && !isBayer) return;
+
+    const levels = config.colorCount;
+    const step = 255 / (levels > 1 ? levels - 1 : 1);
 
     if (config.useOriginalColor) {
-        // (La lógica para color original se mantiene igual)
+        // ========= LÓGICA DE COLOR ORIGINAL COMPLETAMENTE REESCRITA =========
+        const colorBuffer = new Float32Array(pix); // Usamos un buffer flotante para la precisión del error
+
+        for (let y = 0; y < ph; y++) {
+            const isReversed = config.serpentineScan && y % 2 === 1;
+            const xStart = isReversed ? pw - 1 : 0;
+            const xEnd = isReversed ? -1 : pw;
+            const xStep = isReversed ? -1 : 1;
+
+            for (let x = xStart; x !== xEnd; x += xStep) {
+                const i = (y * pw + x) * 4;
+
+                // Obtener el color actual (con el error acumulado)
+                const oldR = colorBuffer[i];
+                const oldG = colorBuffer[i + 1];
+                const oldB = colorBuffer[i + 2];
+
+                // Cuantizar cada canal para encontrar el color más cercano en la paleta implícita
+                const newR = Math.round(oldR / step) * step;
+                const newG = Math.round(oldG / step) * step;
+                const newB = Math.round(oldB / step) * step;
+
+                // Actualizar el píxel en la imagen final
+                pix[i] = newR;
+                pix[i + 1] = newG;
+                pix[i + 2] = newB;
+
+                // Si no es un algoritmo de difusión, no calculamos ni esparcimos el error
+                if (isBayer) continue;
+
+                // Calcular el error para cada canal
+                const errR = oldR - newR;
+                const errG = oldG - newG;
+                const errB = oldB - newB;
+
+                // Distribuir el error a los píxeles vecinos
+                for (const pt of kernel.points) {
+                    const dx = isReversed ? -pt.dx : pt.dx;
+                    const nx = x + dx;
+                    const ny = y + pt.dy;
+
+                    if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
+                        const ni = (ny * pw + nx) * 4;
+                        const w = (pt.w / kernel.divisor) * config.diffusionStrength;
+                        colorBuffer[ni]     += errR * w;
+                        colorBuffer[ni + 1] += errG * w;
+                        colorBuffer[ni + 2] += errB * w;
+                    }
+                }
+            }
+        }
     } else {
-        if (config.effect === 'bayer') {
-            const levels = config.colorCount;
+        // --- Lógica para paleta de colores (sin cambios, ya funcionaba) ---
+        if (isBayer) {
             const baseStrength = 255 / levels;
             const ditherStrength = baseStrength * config.patternStrength * 2;
             for (let y = 0; y < ph; y++) {
@@ -71,8 +124,7 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
             for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
                 lumaBuffer[j] = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
             }
-            const levels = config.colorCount;
-            const step = 255 / (levels > 1 ? levels - 1 : 1);
+
             for (let y = 0; y < ph; y++) {
                 const isReversed = config.serpentineScan && y % 2 === 1;
                 const xStart = isReversed ? pw - 1 : 0;
@@ -103,24 +155,16 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
     }
 }
 
-function mapLuma(luma, lumaLUT) {
-    const index = Math.max(0, Math.min(Math.floor(luma), 255));
-    const pos = index * 3;
-    return [lumaLUT[pos], lumaLUT[pos + 1], lumaLUT[pos + 2]];
-}
-
 self.onmessage = function(e) {
     const { imageData, config, lumaLUT, pw, ph } = e.data;
     const pixels = imageData.data;
 
-    switch(config.effect) {
-        case 'posterize':
-            drawPosterize(pixels, config, lumaLUT);
-            break;
-        default:
-            drawDither(pixels, config, lumaLUT, pw, ph);
+    if (config.effect === 'posterize') {
+        // Posterize no usa lumaLUT si es a color original, por eso se llama aparte.
+        drawPosterize(pixels, config);
+    } else {
+        drawDither(pixels, config, lumaLUT, pw, ph);
     }
 
-    // Se envía el objeto ImageData directamente, y se transfiere su buffer interno.
     self.postMessage(imageData, [imageData.data.buffer]);
 };
