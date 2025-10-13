@@ -1,179 +1,178 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Interfaz de Usuario (UI) (VERSIÓN MEJORADA)
+ * DitherLab v7 - Web Worker para Dithering (VERSIÓN CORREGIDA)
  * ============================================================================
- * - Gestiona todos los elementos del DOM, sus eventos y actualizaciones visuales.
- * - Escucha las acciones del usuario y emite eventos para notificar a otros módulos.
- * - Se suscribe a los cambios de estado para mantener la UI sincronizada.
+ * - Contiene toda la lógica de procesamiento intensivo para los algoritmos
+ * de dithering, ejecutándose en un hilo separado para no bloquear la UI.
+ * - Recibe los datos de la imagen y la configuración, aplica el efecto
+ * correspondiente y devuelve el resultado al hilo principal.
  * ============================================================================
  */
-import { events } from '../app/events.js';
-import { getState, updateConfig } from '../app/state.js';
-import { ALGORITHM_INFO, ALGORITHM_NAMES, KERNELS } from '../core/constants.js';
-import { throttle, debounce, showToast } from '../utils/helpers.js';
 
-const elements = {};
-let lastColorCount = 0;
-let lastFrameTime = Date.now();
-let frameCount = 0;
+// Importamos las constantes necesarias directamente en el scope del worker
+const KERNELS = {
+    'floyd-steinberg': {
+        divisor: 16,
+        points: [
+            { dx: 1, dy: 0, w: 7 }, { dx: -1, dy: 1, w: 3 },
+            { dx: 0, dy: 1, w: 5 }, { dx: 1, dy: 1, w: 1 }
+        ]
+    },
+    'atkinson': {
+        divisor: 8,
+        points: [
+            { dx: 1, dy: 0, w: 1 }, { dx: 2, dy: 0, w: 1 },
+            { dx: -1, dy: 1, w: 1 }, { dx: 0, dy: 1, w: 1 },
+            { dx: 1, dy: 1, w: 1 }, { dx: 0, dy: 2, w: 1 }
+        ]
+    },
+    'stucki': {
+        divisor: 42,
+        points: [
+            { dx: 1, dy: 0, w: 8 }, { dx: 2, dy: 0, w: 4 },
+            { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 8 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 },
+            { dx: -2, dy: 2, w: 1 }, { dx: -1, dy: 2, w: 2 }, { dx: 0, dy: 2, w: 4 }, { dx: 1, dy: 2, w: 2 }, { dx: 2, dy: 2, w: 1 }
+        ]
+    },
+    'jarvis-judice-ninke': {
+        divisor: 48,
+        points: [
+            { dx: 1, dy: 0, w: 7 }, { dx: 2, dy: 0, w: 5 },
+            { dx: -2, dy: 1, w: 3 }, { dx: -1, dy: 1, w: 5 }, { dx: 0, dy: 1, w: 7 }, { dx: 1, dy: 1, w: 5 }, { dx: 2, dy: 1, w: 3 },
+            { dx: -2, dy: 2, w: 1 }, { dx: -1, dy: 2, w: 3 }, { dx: 0, dy: 2, w: 5 }, { dx: 1, dy: 2, w: 3 }, { dx: 2, dy: 2, w: 1 }
+        ]
+    },
+    'sierra': {
+        divisor: 32,
+        points: [
+            { dx: 1, dy: 0, w: 5 }, { dx: 2, dy: 0, w: 3 },
+            { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 5 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 },
+            { dx: -1, dy: 2, w: 2 }, { dx: 0, dy: 2, w: 3 }, { dx: 1, dy: 2, w: 2 }
+        ]
+    },
+    'two-row-sierra': {
+        divisor: 16,
+        points: [
+            { dx: 1, dy: 0, w: 4 }, { dx: 2, dy: 0, w: 3 },
+            { dx: -2, dy: 1, w: 1 }, { dx: -1, dy: 1, w: 2 }, { dx: 0, dy: 1, w: 3 }, { dx: 1, dy: 1, w: 2 }, { dx: 2, dy: 1, w: 1 }
+        ]
+    },
+    'sierra-lite': {
+        divisor: 4,
+        points: [
+            { dx: 1, dy: 0, w: 2 }, { dx: -1, dy: 1, w: 1 }, { dx: 0, dy: 1, w: 1 }
+        ]
+    },
+    'burkes': {
+        divisor: 32,
+        points: [
+            { dx: 1, dy: 0, w: 8 }, { dx: 2, dy: 0, w: 4 },
+            { dx: -2, dy: 1, w: 2 }, { dx: -1, dy: 1, w: 4 }, { dx: 0, dy: 1, w: 8 }, { dx: 1, dy: 1, w: 4 }, { dx: 2, dy: 1, w: 2 }
+        ]
+    }
+};
 
-function queryElements() {
-    const ids = [
-        'dropZone', 'fileInput', 'playBtn', 'restartBtn', 'effectSelect',
-        'monochromeToggle', 'colorCountSlider', 'colorCountVal', 'colorPickerContainer',
-        'ditherControls', 'ditherScale', 'ditherScaleVal', 'serpentineToggle',
-        'diffusionStrengthSlider', 'diffusionStrengthVal', 'patternStrengthSlider',
-        'patternStrengthVal', 'recBtn', 'stopBtn', 'downloadImageBtn', 'status',
-        'recIndicator', 'presetNameInput', 'savePresetBtn', 'presetSelect',
-        'deletePresetBtn', 'originalColorToggle', 'shortcutsBtn', 'shortcutsModal', 'closeShortcutsBtn',
-        'mediaType', 'mediaDimensions', 'timelinePanel', 'infoText',
-        'errorDiffusionControls', 'orderedDitherControls',
-        'fps', 'frameTime', 'effectName', 'timeDisplay', 'speedDisplay',
-        'resetImageAdjustmentsBtn', 'brightnessSlider', 'brightnessVal',
-        'contrastSlider', 'contrastVal', 'saturationSlider', 'saturationVal',
-        'toggleCurvesBtn', 'basicImageControls', 'curvesEditor',
-        'metricsBtn', 'metricsModal', 'closeMetricsBtn', 'updateMetricsBtn',
-        'metricPSNR', 'metricSSIM', 'metricCompression',
-        'gifFpsSlider', 'gifFpsVal', 'gifQualitySlider', 'gifQualityVal',
-        'spriteColsSlider', 'spriteCols', 'spriteFrameCountSlider', 'spriteFrameCount',
-        'ditherScaleLabel', 'halftoneSizeLabel', 'halftoneSizeSlider', 'halftoneSizeVal',
-        'qualityControls', 'nativeQualityToggle', 'sharpeningSlider', 'sharpeningVal',
-        'artisticControls', 'errorGammaSlider', 'errorGammaVal', 'diffusionNoiseSlider', 'diffusionNoiseVal',
-        'patternMixSlider', 'patternMixVal', 'errorArtisticControls', 'orderedArtisticControls'
-    ];
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) elements[id] = el;
-    });
+const BAYER_4x4_THRESHOLD = [
+    [0, 8, 2, 10], [12, 4, 14, 6],
+    [3, 11, 1, 9], [15, 7, 13, 5]
+].flat().map(v => (v / 16.0) - 0.5);
+
+// --- Funciones de Dithering ---
+
+function findClosestColor(r, g, b, lumaLUT) {
+    const luma = Math.round(r * 0.299 + g * 0.587 + b * 0.114);
+    const index = Math.max(0, Math.min(luma, 255));
+    const pos = index * 3;
+    return [lumaLUT[pos], lumaLUT[pos + 1], lumaLUT[pos + 2]];
 }
 
-function bindEventListeners() {
-    if (elements.effectSelect) elements.effectSelect.addEventListener('change', (e) => updateConfig({ effect: e.target.value }));
-    if (elements.brightnessSlider) elements.brightnessSlider.addEventListener('input', throttle((e) => updateConfig({ brightness: parseInt(e.target.value) }), 16));
-    if (elements.contrastSlider) elements.contrastSlider.addEventListener('input', throttle((e) => updateConfig({ contrast: parseInt(e.target.value) / 100 }), 16));
-    if (elements.saturationSlider) elements.saturationSlider.addEventListener('input', throttle((e) => updateConfig({ saturation: parseInt(e.target.value) / 100 }), 16));
-    if (elements.resetImageAdjustmentsBtn) {
-        elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
-            updateConfig({ brightness: 0, contrast: 1.0, saturation: 1.0 });
-            events.emit('curves:reset-all');
-            showToast('Ajustes de imagen reseteados');
-        });
-    }
-    if (elements.toggleCurvesBtn) {
-        elements.toggleCurvesBtn.addEventListener('click', () => {
-            elements.basicImageControls?.classList.toggle('hidden');
-            elements.curvesEditor?.classList.toggle('hidden');
-            events.emit('ui:curves-editor-toggled');
-        });
-    }
+function applyErrorDiffusion(pixels, pw, ph, config, lumaLUT) {
+    const kernel = KERNELS[config.effect];
+    if (!kernel) return;
 
-    if (elements.colorCountSlider) {
-        elements.colorCountSlider.addEventListener('input', debounce((e) => {
-            const newCount = parseInt(e.target.value);
-            updateConfig({ colorCount: newCount });
-            if (getState().config.isMonochrome) {
-                generateMonochromePalette(newCount);
-            } else {
-                events.emit('palette:regenerate-color');
+    const strength = config.diffusionStrength;
+    const serpentine = config.serpentineScan;
+    let dir = 1;
+
+    for (let y = 0; y < ph; y++) {
+        const yStart = dir === 1 ? 0 : pw - 1;
+        const yEnd = dir === 1 ? pw : -1;
+
+        for (let x = yStart; x !== yEnd; x += dir) {
+            const index = (y * pw + x) * 4;
+            const oldR = pixels[index], oldG = pixels[index + 1], oldB = pixels[index + 2];
+
+            const [newR, newG, newB] = findClosestColor(oldR, oldG, oldB, lumaLUT);
+            pixels[index] = newR;
+            pixels[index + 1] = newG;
+            pixels[index + 2] = newB;
+
+            const errR = (oldR - newR) * strength;
+            const errG = (oldG - newG) * strength;
+            const errB = (oldB - newB) * strength;
+
+            for (const p of kernel.points) {
+                const nx = x + p.dx * dir;
+                const ny = y + p.dy;
+                if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
+                    const nIndex = (ny * pw + nx) * 4;
+                    const weight = p.w / kernel.divisor;
+                    pixels[nIndex]     = Math.max(0, Math.min(255, pixels[nIndex] + errR * weight));
+                    pixels[nIndex + 1] = Math.max(0, Math.min(255, pixels[nIndex + 1] + errG * weight));
+                    pixels[nIndex + 2] = Math.max(0, Math.min(255, pixels[nIndex + 2] + errB * weight));
+                }
             }
-        }, 150));
-    }
-    
-    if (elements.monochromeToggle) {
-        elements.monochromeToggle.addEventListener('change', (e) => {
-            const isMonochrome = e.target.checked;
-            updateConfig({ isMonochrome });
-            if (isMonochrome) {
-                generateMonochromePalette(getState().config.colorCount);
-            } else {
-                events.emit('palette:regenerate-color');
-            }
-        });
-    }
-    
-    if (elements.originalColorToggle) elements.originalColorToggle.addEventListener('change', (e) => updateConfig({ useOriginalColor: e.target.checked }));
-    if (elements.ditherScale) elements.ditherScale.addEventListener('input', throttle((e) => updateConfig({ ditherScale: parseInt(e.target.value) }), 16));
-    if (elements.halftoneSizeSlider) elements.halftoneSizeSlider.addEventListener('input', throttle((e) => updateConfig({ halftoneSize: parseInt(e.target.value) }), 16));
-    if (elements.serpentineToggle) elements.serpentineToggle.addEventListener('change', (e) => updateConfig({ serpentineScan: e.target.checked }));
-    if (elements.diffusionStrengthSlider) elements.diffusionStrengthSlider.addEventListener('input', throttle((e) => updateConfig({ diffusionStrength: parseInt(e.target.value) / 100 }), 16));
-    if (elements.patternStrengthSlider) elements.patternStrengthSlider.addEventListener('input', throttle((e) => updateConfig({ patternStrength: parseInt(e.target.value) / 100 }), 16));
-    if (elements.nativeQualityToggle) elements.nativeQualityToggle.addEventListener('change', (e) => updateConfig({ nativeQualityMode: e.target.checked }));
-    if (elements.sharpeningSlider) elements.sharpeningSlider.addEventListener('input', throttle((e) => updateConfig({ sharpeningStrength: parseInt(e.target.value) / 100 }), 16));
-    if (elements.errorGammaSlider) elements.errorGammaSlider.addEventListener('input', throttle((e) => updateConfig({ errorGamma: parseInt(e.target.value) / 100 }), 16));
-    if (elements.diffusionNoiseSlider) elements.diffusionNoiseSlider.addEventListener('input', throttle((e) => updateConfig({ diffusionNoise: parseInt(e.target.value) }), 16));
-    if (elements.patternMixSlider) elements.patternMixSlider.addEventListener('input', throttle((e) => updateConfig({ patternMix: parseInt(e.target.value) / 100 }), 16));
-
-    // El resto de listeners... (se omiten por brevedad, son iguales)
-}
-
-function generateMonochromePalette(colorCount) {
-    const grayPalette = Array.from({ length: colorCount }, (_, i) => {
-        const value = Math.floor((i / Math.max(1, colorCount - 1)) * 255);
-        return '#' + value.toString(16).padStart(2, '0').repeat(3);
-    });
-    updateConfig({ colors: grayPalette });
-}
-
-function updateColorInputs() {
-    const { config } = getState();
-    const { colors, colorCount, useOriginalColor, isMonochrome } = config;
-
-    if (!elements.colorPickerContainer) return;
-
-    elements.monochromeToggle.disabled = useOriginalColor;
-    elements.colorCountSlider.disabled = useOriginalColor;
-
-    const container = elements.colorPickerContainer;
-    if (colorCount !== lastColorCount) {
-        container.innerHTML = "";
-        for (let i = 0; i < colorCount; i++) {
-            const hexColor = colors[i] || '#000000';
-            const label = document.createElement("label");
-            label.className = "block";
-            label.innerHTML = `<span class="text-xs text-gray-400">Color ${i + 1}</span><input type="color" value="${hexColor}" data-index="${i}" class="w-full h-10 p-0 border-none rounded cursor-pointer"/>`;
-            
-            // ========= LÓGICA DE UI MEJORADA =========
-            label.querySelector("input").addEventListener("input", (e) => {
-                const newColors = [...getState().config.colors];
-                newColors[i] = e.target.value;
-                // Al elegir un color, forzamos el modo color
-                updateConfig({ colors: newColors, isMonochrome: false });
-            });
-            container.appendChild(label);
         }
-        lastColorCount = colorCount;
-    } else {
-        container.querySelectorAll('input[type="color"]').forEach((input, i) => {
-            if (colors[i] && input.value !== colors[i]) input.value = colors[i];
-        });
+        if (serpentine) dir *= -1;
     }
-    
-    container.querySelectorAll('input[type="color"]').forEach(input => input.disabled = useOriginalColor || isMonochrome);
 }
 
-function updateUI(state) {
-    if (!state || !state.config) return;
-    const { config } = state;
-    
-    // Sincronizar el estado de 'isMonochrome' con el checkbox
-    if (elements.monochromeToggle) elements.monochromeToggle.checked = config.isMonochrome;
+function applyOrderedDither(pixels, pw, ph, config, lumaLUT) {
+    const strength = config.patternStrength;
+    for (let y = 0; y < ph; y++) {
+        for (let x = 0; x < pw; x++) {
+            const index = (y * pw + x) * 4;
+            let r = pixels[index], g = pixels[index + 1], b = pixels[index + 2];
 
-    // El resto de la función se mantiene igual...
-    // ...
-    updateColorInputs();
-    // ...
+            const threshold = BAYER_4x4_THRESHOLD[(y % 4) * 4 + (x % 4)];
+            r = Math.max(0, Math.min(255, r + threshold * 255 * strength));
+            g = Math.max(0, Math.min(255, g + threshold * 255 * strength));
+            b = Math.max(0, Math.min(255, b + threshold * 255 * strength));
+
+            const [newR, newG, newB] = findClosestColor(r, g, b, lumaLUT);
+            pixels[index] = newR;
+            pixels[index + 1] = newG;
+            pixels[index + 2] = newB;
+        }
+    }
 }
 
-export function initializeUI() {
-    queryElements();
-    bindEventListeners();
-    events.on('state:updated', updateUI);
-    events.on('config:updated', (state) => updateUI(state)); 
-    events.on('metrics:results', ({ psnr, ssim, compression }) => {
-        if (elements.metricPSNR) elements.metricPSNR.textContent = psnr === Infinity ? '∞ dB' : `${psnr.toFixed(2)} dB`;
-        if (elements.metricSSIM) elements.metricSSIM.textContent = ssim.toFixed(4);
-        if (elements.metricCompression) elements.metricCompression.textContent = `${compression.ratio.toFixed(2)}% (${compression.unique} colores)`;
-        showToast('Métricas actualizadas.');
-    });
-    console.log('UI Module inicializado.');
+function applyPosterize(pixels, pw, ph, lumaLUT) {
+    for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+        const [newR, newG, newB] = findClosestColor(r, g, b, lumaLUT);
+        pixels[i] = newR;
+        pixels[i + 1] = newG;
+        pixels[i + 2] = newB;
+    }
 }
+
+// --- Event Listener del Worker ---
+
+self.onmessage = (e) => {
+    const { imageData, config, lumaLUT, pw, ph } = e.data;
+    const pixels = imageData.data;
+
+    if (KERNELS[config.effect]) {
+        applyErrorDiffusion(pixels, pw, ph, config, lumaLUT);
+    } else if (config.effect === 'bayer') {
+        applyOrderedDither(pixels, pw, ph, config, lumaLUT);
+    } else if (config.effect === 'posterize') {
+        applyPosterize(pixels, pw, ph, lumaLUT);
+    }
+    // Otros algoritmos como 'blue-noise', 'variable-error', etc., se podrían añadir aquí.
+
+    // Devolvemos el imageData modificado al hilo principal.
+    // El segundo argumento transfiere la propiedad del buffer, lo que es más rápido.
+    self.postMessage(imageData, [imageData.data.buffer]);
+};
