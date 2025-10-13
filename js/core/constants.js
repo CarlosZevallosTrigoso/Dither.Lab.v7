@@ -92,8 +92,6 @@ export const ALGORITHM_INFO = {
   'two-row-sierra': "Versión optimizada de Sierra que solo difunde a 7 píxeles en dos filas. Ofrece una excelente calidad visual con un rendimiento mejorado.",
   'sierra-lite': "Versión ligera de Sierra con solo 4 píxeles. Muy rápido, ideal para preview o imágenes grandes. Similar a Floyd-Steinberg pero más simple.",
   'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes.",
-  'ostromoukhov': "Difusión de error modulada con ruido azul. Varía la distribución del error para romper los patrones repetitivos, logrando un acabado muy orgánico.",
-  'riemersma': "Procesa los píxeles siguiendo una curva de Hilbert. El error se acumula y pasa de un píxel al siguiente en la curva, creando texturas únicas.",
   'halftone-dither': 'Simula la técnica de impresión de semitonos usando puntos de tamaño variable para representar tonos. Ideal para un look de cómic o periódico.',
 };
 
@@ -112,7 +110,5 @@ export const ALGORITHM_NAMES = {
   'two-row-sierra': "Two-Row Sierra",
   'sierra-lite': "Sierra Lite",
   'burkes': "Burkes",
-  'ostromoukhov': "Ostromoukhov",
-  'riemersma': "Riemersma (Hilbert Curve)",
   'halftone-dither': "Halftone Dither",
 };
