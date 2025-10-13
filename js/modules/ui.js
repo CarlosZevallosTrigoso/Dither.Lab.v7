@@ -122,6 +122,9 @@ function bindEventListeners() {
             const { config } = getState();
             if (config.isMonochrome) {
                 generateMonochromePalette(newCount);
+            } else {
+                // ✅ CORRECCIÓN: Si no es monocromo, emitir evento para regenerar la paleta desde el medio
+                events.emit('palette:regenerate-from-media');
             }
         }, 150));
     }
@@ -134,6 +137,9 @@ function bindEventListeners() {
             if (isMonochrome) {
                 const { config } = getState();
                 generateMonochromePalette(config.colorCount);
+            } else {
+                // ✅ MEJORA: Al desactivar monocromo, regenerar la paleta de color
+                events.emit('palette:regenerate-from-media');
             }
         });
     }
