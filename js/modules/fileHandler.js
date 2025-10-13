@@ -8,6 +8,7 @@ import { updateState, getState, updateConfig } from '../app/state.js';
 import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null;
+let p5Instance = null; // Guardar referencia a la instancia de p5.js
 
 function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
@@ -27,11 +28,15 @@ function rgbToHsl(r, g, b) {
 }
 
 async function generatePaletteFromMedia(media, colorCount, p) {
+    // Si no hay medio cargado, no hacer nada
+    if (!media) {
+        console.warn("generatePaletteFromMedia fue llamado sin un medio válido.");
+        return;
+    }
+    
     showToast('Generando paleta desde el medio...');
     
-    // Optimización: Muestrear píxeles en lugar de redimensionar.
-    // Esto da una paleta más precisa sin un gran costo de rendimiento.
-    const MAX_SAMPLES = 10000; // Analizar un máximo de 10,000 píxeles
+    const MAX_SAMPLES = 10000;
     const mediaW = media.width;
     const mediaH = media.height;
 
@@ -42,12 +47,11 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         if (getState().mediaType === 'video') {
             media.pause();
             await new Promise(resolve => {
-                media.elt.onseeked = () => {
-                    requestAnimationFrame(() => {
-                        media.elt.onseeked = null;
-                        resolve();
-                    });
+                const onSeeked = () => {
+                    media.elt.removeEventListener('seeked', onSeeked);
+                    requestAnimationFrame(resolve);
                 };
+                media.elt.addEventListener('seeked', onSeeked, { once: true });
                 media.time(0);
             });
             tempCanvas.elt.getContext('2d').drawImage(media.elt, 0, 0, mediaW, mediaH);
@@ -62,7 +66,7 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         const step = Math.max(1, Math.floor(totalPixels / MAX_SAMPLES));
 
         for (let i = 0; i < tempCanvas.pixels.length; i += 4 * step) {
-            if (tempCanvas.pixels[i+3] > 128) { // Ignorar píxeles transparentes
+            if (tempCanvas.pixels[i+3] > 128) {
                 pixels.push([tempCanvas.pixels[i], tempCanvas.pixels[i+1], tempCanvas.pixels[i+2]]);
             }
         }
@@ -72,7 +76,6 @@ async function generatePaletteFromMedia(media, colorCount, p) {
             return ['#000000', '#FFFFFF'];
         }
 
-        // Algoritmo K-Means++ para encontrar los centroides (colores de la paleta)
         const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
         let centroids = [pixels[Math.floor(Math.random() * pixels.length)]];
         
@@ -122,10 +125,12 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         
         centroids.sort((a, b) => rgbToHsl(a[0], a[1], a[2])[2] - rgbToHsl(b[0], b[1], b[2])[2]);
         
-        return centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
+        // Directamente actualizamos la configuración con la nueva paleta
+        const newPalette = centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
+        updateConfig({ colors: newPalette });
 
     } finally {
-        tempCanvas.remove(); // Asegurarnos de limpiar el canvas temporal
+        tempCanvas.remove();
     }
 }
 
@@ -175,9 +180,9 @@ async function handleFile(file, p) {
             media: mediaElement,
             mediaType
         });
-
-        const newPalette = await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
-        updateConfig({ colors: newPalette });
+        
+        // La paleta se genera después de cargar el medio
+        await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         
         showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado.`);
 
@@ -190,6 +195,7 @@ async function handleFile(file, p) {
 }
 
 export function initializeFileHandler(p) {
+    p5Instance = p; // Guardamos la instancia de p5
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
 
@@ -214,6 +220,14 @@ export function initializeFileHandler(p) {
     fileInput.addEventListener("change", e => {
         if (e.target.files.length > 0) {
             handleFile(e.target.files[0], p);
+        }
+    });
+
+    // ✅ CORRECCIÓN: Añadimos el listener para el nuevo evento de regeneración de paleta
+    events.on('palette:regenerate-from-media', async () => {
+        const { media, config } = getState();
+        if (media) {
+            await generatePaletteFromMedia(media, config.colorCount, p5Instance);
         }
     });
 
