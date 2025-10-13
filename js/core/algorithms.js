@@ -93,34 +93,57 @@ export function applyImageAdjustments(pixels, config, width, height) {
 }
 
 /**
- * El algoritmo Halftone se mantiene en el hilo principal porque depende
- * de las funciones de dibujo de p5.js (ellipse, fill, etc.).
+ * ✅ MEJORADO: El algoritmo Halftone ahora usa la paleta de colores.
+ * Dibuja usando el color más claro y el más oscuro de la paleta.
  */
 export function drawHalftoneDither(p, buffer, src, config) {
-    const pw = buffer.width, ph = buffer.height;
+    const pw = buffer.width;
+    const ph = buffer.height;
     const tempPixels = src.pixels;
-    buffer.background(255);
+    
+    // Encontrar los colores más claros y oscuros de la paleta
+    let lightestColor = p.color(255);
+    let darkestColor = p.color(0);
+
+    if (config.colors && config.colors.length > 0) {
+        const p5colors = config.colors.map(hex => p.color(hex));
+        p5colors.sort((a, b) => p.lightness(a) - p.lightness(b));
+        lightestColor = p5colors[p5colors.length - 1];
+        darkestColor = p5colors[0];
+    }
+    
+    buffer.background(lightestColor);
     buffer.noStroke();
-    buffer.fill(0);
+    buffer.fill(darkestColor);
+    
     const cellSize = config.halftoneSize;
     const k = cellSize / 255;
+    
     for (let y = 0; y < ph; y += cellSize) {
         for (let x = 0; x < pw; x += cellSize) {
-            let totalLuma = 0, pixelCount = 0;
+            let totalLuma = 0;
+            let pixelCount = 0;
+            
             for (let j = 0; j < cellSize; j++) {
                 for (let i = 0; i < cellSize; i++) {
-                    const px = x + i, py = y + j;
+                    const px = x + i;
+                    const py = y + j;
                     if (px < pw && py < ph) {
                         const pixIndex = (py * pw + px) * 4;
-                        const r = tempPixels[pixIndex], g = tempPixels[pixIndex + 1], b = tempPixels[pixIndex + 2];
+                        const r = tempPixels[pixIndex];
+                        const g = tempPixels[pixIndex + 1];
+                        const b = tempPixels[pixIndex + 2];
                         totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
                         pixelCount++;
                     }
                 }
             }
-            const avgLuma = pixelCount > 0 ? totalLuma / pixelCount : 0;
-            const dotSize = (255 - avgLuma) * k;
-            buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
+            
+            if (pixelCount > 0) {
+                const avgLuma = totalLuma / pixelCount;
+                const dotSize = (255 - avgLuma) * k;
+                buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
+            }
         }
     }
 }
