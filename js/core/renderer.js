@@ -64,14 +64,20 @@ export function sketch(p) {
         bufferPool = new BufferPool();
         lumaLUT = new LumaLUT();
         
-        // Inicializamos el Web Worker
         ditherWorker = new Worker('./js/core/dither.worker.js');
 
-        // Manejador para cuando el worker nos devuelve los píxeles procesados
+        // ========= CORRECCIÓN APLICADA AQUÍ =========
+        // El worker devuelve el objeto imageData directamente, no dentro de otro objeto.
         ditherWorker.onmessage = (e) => {
-            // ========= CORRECCIÓN APLICADA AQUÍ =========
-            const imageData = e.data;
+            const imageData = e.data; 
             // ===========================================
+            
+            if (!imageData || !imageData.width) {
+                console.error("El worker devolvió datos inválidos.", e.data);
+                isProcessing = false;
+                return;
+            }
+
             const buffer = bufferPool.get(imageData.width, imageData.height, p);
             buffer.drawingContext.putImageData(imageData, 0, 0);
             
@@ -156,7 +162,6 @@ export function sketch(p) {
             pw = p.width;
             ph = p.height;
         } else {
-            // Calidad mejorada por defecto: escala 1 en lugar de 2
             const ditherScale = config.ditherScale > 1 ? config.ditherScale : 1;
             pw = Math.floor(p.width / ditherScale);
             ph = Math.floor(p.height / ditherScale);
@@ -167,7 +172,6 @@ export function sketch(p) {
         buffer.loadPixels();
         applyImageAdjustments(buffer.pixels, config, pw, ph);
 
-        // Si es Halftone o no hay dithering, lo hacemos en el hilo principal
         if (config.effect === 'halftone-dither' || !isDitheringActive) {
             if (config.effect === 'halftone-dither') {
                 drawHalftoneDither(p, buffer, buffer, config);
@@ -176,12 +180,9 @@ export function sketch(p) {
             events.emit('render:frame-drawn');
             if (state.mediaType === 'image') needsRedraw = false;
         } else {
-            // Para todo lo demás, usamos el WORKER
             isProcessing = true;
             const imageData = buffer.drawingContext.getImageData(0, 0, pw, ph);
             
-            // Enviamos los datos al worker. El último argumento es un array de
-            // "Transferable Objects" para una transferencia de memoria casi instantánea.
             ditherWorker.postMessage({
                 imageData,
                 config,
