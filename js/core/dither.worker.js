@@ -47,14 +47,17 @@ function drawPosterize(pixels, config) {
 function drawDither(pix, config, lumaLUT, pw, ph) {
     const kernel = KERNELS[config.effect];
     const isBayer = config.effect === 'bayer';
-    if (!kernel && !isBayer) return;
+    if (!kernel && !isBayer) {
+        // Si no hay algoritmo aplicable, no hacemos nada y la imagen queda como está.
+        return;
+    }
 
     const levels = config.colorCount;
     const step = 255 / (levels > 1 ? levels - 1 : 1);
 
     if (config.useOriginalColor) {
         // ========= LÓGICA DE COLOR ORIGINAL COMPLETAMENTE REESCRITA =========
-        const colorBuffer = new Float32Array(pix); // Usamos un buffer flotante para la precisión del error
+        const colorBuffer = new Float32Array(pix);
 
         for (let y = 0; y < ph; y++) {
             const isReversed = config.serpentineScan && y % 2 === 1;
@@ -64,36 +67,20 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
 
             for (let x = xStart; x !== xEnd; x += xStep) {
                 const i = (y * pw + x) * 4;
-
-                // Obtener el color actual (con el error acumulado)
-                const oldR = colorBuffer[i];
-                const oldG = colorBuffer[i + 1];
-                const oldB = colorBuffer[i + 2];
-
-                // Cuantizar cada canal para encontrar el color más cercano en la paleta implícita
+                const oldR = colorBuffer[i], oldG = colorBuffer[i+1], oldB = colorBuffer[i+2];
                 const newR = Math.round(oldR / step) * step;
                 const newG = Math.round(oldG / step) * step;
                 const newB = Math.round(oldB / step) * step;
 
-                // Actualizar el píxel en la imagen final
-                pix[i] = newR;
-                pix[i + 1] = newG;
-                pix[i + 2] = newB;
+                pix[i] = newR; pix[i+1] = newG; pix[i+2] = newB;
 
-                // Si no es un algoritmo de difusión, no calculamos ni esparcimos el error
                 if (isBayer) continue;
 
-                // Calcular el error para cada canal
-                const errR = oldR - newR;
-                const errG = oldG - newG;
-                const errB = oldB - newB;
+                const errR = oldR - newR, errG = oldG - newG, errB = oldB - newB;
 
-                // Distribuir el error a los píxeles vecinos
                 for (const pt of kernel.points) {
                     const dx = isReversed ? -pt.dx : pt.dx;
-                    const nx = x + dx;
-                    const ny = y + pt.dy;
-
+                    const nx = x + dx, ny = y + pt.dy;
                     if (nx >= 0 && nx < pw && ny >= 0 && ny < ph) {
                         const ni = (ny * pw + nx) * 4;
                         const w = (pt.w / kernel.divisor) * config.diffusionStrength;
@@ -112,36 +99,35 @@ function drawDither(pix, config, lumaLUT, pw, ph) {
             for (let y = 0; y < ph; y++) {
                 for (let x = 0; x < pw; x++) {
                     const i = (y * pw + x) * 4;
-                    const luma = pix[i] * 0.299 + pix[i + 1] * 0.587 + pix[i + 2] * 0.114;
-                    const ditherOffset = bayerMatrix[(y % 4) * 4 + (x % 4)] * ditherStrength;
+                    const luma = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
+                    const ditherOffset = bayerMatrix[(y%4)*4 + (x%4)] * ditherStrength;
                     const mixedLuma = luma * (1 - config.patternMix) + (luma + ditherOffset) * config.patternMix;
                     const [r, g, b] = mapLuma(mixedLuma, lumaLUT);
-                    pix[i] = r; pix[i + 1] = g; pix[i + 2] = b;
+                    pix[i] = r; pix[i+1] = g; pix[i+2] = b;
                 }
             }
         } else {
             const lumaBuffer = new Float32Array(pw * ph);
-            for (let i = 0, j = 0; i < pix.length; i += 4, j++) {
+            for (let i = 0, j = 0; i < pix.length; i+=4, j++) {
                 lumaBuffer[j] = pix[i] * 0.299 + pix[i+1] * 0.587 + pix[i+2] * 0.114;
             }
-
             for (let y = 0; y < ph; y++) {
                 const isReversed = config.serpentineScan && y % 2 === 1;
                 const xStart = isReversed ? pw - 1 : 0;
                 const xEnd = isReversed ? -1 : pw;
                 const xStep = isReversed ? -1 : 1;
-                for (let x = xStart; x !== xEnd; x += xStep) {
+                for (let x = xStart; x !== xEnd; x+=xStep) {
                     const lumaIndex = y * pw + x;
                     const pixIndex = lumaIndex * 4;
-                    const noise = (Math.random() * 2 - 1) * config.diffusionNoise;
+                    const noise = (Math.random()*2-1) * config.diffusionNoise;
                     const oldLuma = lumaBuffer[lumaIndex] + noise;
                     const newLuma = Math.round(oldLuma / step) * step;
                     const [r, g, b] = mapLuma(newLuma, lumaLUT);
-                    pix[pixIndex] = r; pix[pixIndex + 1] = g; pix[pixIndex + 2] = b;
+                    pix[pixIndex] = r; pix[pixIndex+1] = g; pix[pixIndex+2] = b;
                     let err = oldLuma - newLuma;
                     const strength = config.diffusionStrength;
                     const gamma = config.errorGamma;
-                    const finalError = Math.pow(Math.abs(err / 255), gamma) * 255 * Math.sign(err) * strength;
+                    const finalError = Math.pow(Math.abs(err/255), gamma) * 255 * Math.sign(err) * strength;
                     for (const pt of kernel.points) {
                         const dx = isReversed ? -pt.dx : pt.dx;
                         const nx = x + dx, ny = y + pt.dy;
@@ -160,8 +146,17 @@ self.onmessage = function(e) {
     const pixels = imageData.data;
 
     if (config.effect === 'posterize') {
-        // Posterize no usa lumaLUT si es a color original, por eso se llama aparte.
-        drawPosterize(pixels, config);
+        if (config.useOriginalColor) {
+            drawPosterize(pixels, config);
+        } else {
+            // La posterización con paleta necesita la LUT
+            const len = pixels.length;
+            for (let i = 0; i < len; i += 4) {
+                const luma = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+                const [r, g, b] = mapLuma(luma, lumaLUT);
+                pixels[i] = r; pixels[i + 1] = g; pixels[i + 2] = b;
+            }
+        }
     } else {
         drawDither(pixels, config, lumaLUT, pw, ph);
     }
