@@ -66,8 +66,6 @@ export function sketch(p) {
         
         ditherWorker = new Worker('./js/core/dither.worker.js');
 
-        // ========= CORRECCIÓN DEFINITIVA DE COMUNICACIÓN =========
-        // El worker envía el objeto 'imageData' directamente. 'e.data' ES 'imageData'.
         ditherWorker.onmessage = (e) => {
             const imageData = e.data;
             
@@ -152,7 +150,9 @@ export function sketch(p) {
 
         const isDitheringActive = config.effect !== 'none';
         const p5colors = config.colors.map(hex => p.color(hex));
-        if (!lumaLUT.lut || config.colors.length !== lumaLUT.cachedColors?.length) {
+        
+        // ✅ CORRECCIÓN: Ligeramente modificado para chequear si el LUT necesita reconstruirse
+        if (lumaLUT.needsRebuild(p5colors)) {
             lumaLUT.build(p5colors, p);
         }
 
@@ -185,7 +185,7 @@ export function sketch(p) {
             ditherWorker.postMessage({
                 imageData,
                 config,
-                lumaLUT: lumaLUT.lut,
+                lumaLUT: lumaLUT.lut, // Pasamos el array de bytes, no el objeto completo
                 pw,
                 ph
             }, [imageData.data.buffer]);
