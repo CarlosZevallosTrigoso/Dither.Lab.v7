@@ -91,8 +91,7 @@ export const ALGORITHM_INFO = {
   'sierra': "Variante de difusión de error con 10 píxeles. Balance entre Stucki y Floyd-Steinberg. Buena calidad con rendimiento aceptable.",
   'two-row-sierra': "Versión optimizada de Sierra que solo difunde a 7 píxeles en dos filas. Ofrece una excelente calidad visual con un rendimiento mejorado.",
   'sierra-lite': "Versión ligera de Sierra con solo 4 píxeles. Muy rápido, ideal para preview o imágenes grandes. Similar a Floyd-Steinberg pero más simple.",
-  'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes.",
-  'halftone-dither': 'Simula la técnica de impresión de semitonos usando puntos de tamaño variable para representar tonos. Ideal para un look de cómic o periódico.',
+  'burkes': "Difusión de error a 7 píxeles. Distribución equilibrada similar a Sierra. Buenos resultados con fotografías y gradientes."
 };
 
 // Nombres para mostrar en los menús desplegables.
@@ -109,6 +108,5 @@ export const ALGORITHM_NAMES = {
   'sierra': "Sierra",
   'two-row-sierra': "Two-Row Sierra",
   'sierra-lite': "Sierra Lite",
-  'burkes': "Burkes",
-  'halftone-dither': "Halftone Dither",
+  'burkes': "Burkes"
 };
