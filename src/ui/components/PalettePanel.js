@@ -26,11 +26,15 @@ export class PalettePanel extends BasePanel {
 
     this.elements.monochromeToggle.addEventListener('change', (e) => {
       this.store.setKey('config.isMonochrome', e.target.checked);
+      // Forzar la regeneración de la paleta al cambiar a/desde monocromo
+      this.eventBus.publish('palette:request-regeneration');
     });
 
     const debouncedColorCountChange = debounce((value) => {
         this.store.setKey('config.colorCount', value);
-    }, 150);
+        // Notificar que se necesita una nueva paleta con la nueva cantidad de colores
+        this.eventBus.publish('palette:request-regeneration');
+    }, 250);
 
     this.elements.colorCountSlider.addEventListener('input', (e) => {
       const value = parseInt(e.target.value, 10);
@@ -47,11 +51,11 @@ export class PalettePanel extends BasePanel {
     this.elements.monochromeToggle.checked = isMonochrome;
     this.elements.monochromeToggle.disabled = useOriginalColor;
     this.elements.colorCountSlider.value = colorCount;
-    this.elements.colorCountSlider.disabled = useOriginalColor;
+    this.elements.colorCountSlider.disabled = useOriginalColor || isMonochrome;
     this.elements.colorCountVal.textContent = colorCount;
 
     // Sincronizar selectores de color (la parte más compleja)
-    this.updateColorPickers(colorCount, colors, useOriginalColor);
+    this.updateColorPickers(colorCount, colors, useOriginalColor || isMonochrome);
   }
   
   updateColorPickers(colorCount, colors, isDisabled) {
@@ -68,7 +72,9 @@ export class PalettePanel extends BasePanel {
       // Si no, solo actualizar los valores y el estado de deshabilitado
       const inputs = this.elements.colorPickerContainer.querySelectorAll('input[type="color"]');
       inputs.forEach((input, i) => {
-        input.value = colors[i] || '#000000';
+        if (colors && colors[i]) {
+            input.value = colors[i];
+        }
         input.disabled = isDisabled;
       });
     }
