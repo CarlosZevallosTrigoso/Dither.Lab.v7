@@ -19,7 +19,8 @@ class PaletteGenerator {
         return this.generateGrayscalePalette(k);
     }
     
-    const tempCanvas = p.createGraphics(100, 100);
+    // (NUEVO) Aumentar el tamaño del canvas para un muestreo de color más preciso.
+    const tempCanvas = p.createGraphics(200, 200);
     tempCanvas.pixelDensity(1);
 
     tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
@@ -120,7 +121,6 @@ class PaletteGenerator {
 
     pixels.forEach((pixel, i) => {
       const centroidIndex = assignments[i];
-      // Añadir una comprobación para evitar errores si el índice es inválido
       if (newCentroids[centroidIndex]) {
           newCentroids[centroidIndex][0] += pixel[0];
           newCentroids[centroidIndex][1] += pixel[1];
