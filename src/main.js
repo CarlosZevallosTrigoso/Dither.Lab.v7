@@ -28,6 +28,9 @@ import GIFExporter from './exporters/GIFExporter.js';
 import SpriteSheetExporter from './exporters/SpriteSheetExporter.js';
 import SequenceExporter from './exporters/SequenceExporter.js';
 
+// Utils
+import { debounce } from './utils/debounce.js';
+
 
 /**
  * @class App
@@ -81,6 +84,12 @@ class App {
       this.registerExporters();
       
       this.presetManager.init();
+
+      // Añadir listener para el redimensionado de la ventana
+      window.addEventListener('resize', debounce(() => {
+        this.canvasManager.resizeCanvasToContainer();
+      }, 150));
+
 
       console.log('DitherLab v7 - Todos los módulos inicializados.');
       eventBus.publish('ui:showToast', { message: 'Bienvenido a DitherLab v7' });
