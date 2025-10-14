@@ -8,7 +8,7 @@
 
 **Una herramienta web para aplicar efectos de tramado (dithering) a imágenes y videos en tiempo real, ahora con una arquitectura modular moderna.**
 
-[Demo en Vivo](https://carloszevallostrigoso.github.io/dither.lab/) • [Reportar un Bug](https://github.com/CarlosZevallosTrigoso/dither.lab/issues)
+[Demo en Vivo](https://ditherlab.xyz) • [Reportar un Bug](https://github.com/CarlosZevallosTrigoso/dither.lab/issues)
 
 </div>
 
