@@ -59,7 +59,13 @@ class ImageProcessor {
     // 2. Aplicar curvas de color
     curveProcessor.apply(buffer.pixels, config.curves);
     
-    // 3. Aplicar el algoritmo de dithering seleccionado
+    // 3. Si "Aplicar a Color Original" está activo, no se aplica dithering.
+    if (config.useOriginalColor) {
+        buffer.updatePixels();
+        return buffer;
+    }
+
+    // 4. Aplicar el algoritmo de dithering seleccionado
     const algorithm = algorithmRegistry.get(config.effect);
     if (algorithm) {
         // Actualizar la LumaLUT con la paleta actual
