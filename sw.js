@@ -7,8 +7,8 @@ const urlsToCache = [
   './',
   './index.html',
   './manifest.json',
-  './static/css/styles.css',
-  './static/js/gif.worker.js',
+  './css/styles.css',
+  './js/gif.worker.js',
   // URLs de librerías externas
   'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js',
   'https://cdn.tailwindcss.com',
