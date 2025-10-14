@@ -122,7 +122,7 @@ export default class ExportManager {
         quality: quality,
         width: this.p5.width,
         height: this.p5.height,
-        workerScript: 'js/gif.worker.js' // Ruta actualizada
+        workerScript: '/js/gif.worker.js' // Ruta actualizada
     });
 
     gif.on('finished', blob => {
