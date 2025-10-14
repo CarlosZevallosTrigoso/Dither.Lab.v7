@@ -1,11 +1,12 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Presets
+ * DitherLab v7 - Módulo de Presets (VERSIÓN COMPLETA CON EXPORT/IMPORT)
  * ============================================================================
  * - Gestiona la lógica para guardar, cargar, eliminar y listar configuraciones
  * personalizadas (presets) usando localStorage.
  * - Interactúa con la UI para obtener nombres de presets y actualizar la lista.
  * - Emite eventos para notificar a la aplicación cuándo se debe aplicar un preset.
+ * - INCLUYE: Exportar/Importar presets como archivos JSON.
  * ============================================================================
  */
 import { events } from '../app/events.js';
@@ -20,6 +21,10 @@ function queryElements() {
     elements.savePresetBtn = document.getElementById('savePresetBtn');
     elements.presetSelect = document.getElementById('presetSelect');
     elements.deletePresetBtn = document.getElementById('deletePresetBtn');
+    // ✅ NUEVOS ELEMENTOS PARA EXPORT/IMPORT
+    elements.exportPresetBtn = document.getElementById('exportPresetBtn');
+    elements.importPresetBtn = document.getElementById('importPresetBtn');
+    elements.importPresetFile = document.getElementById('importPresetFile');
 }
 
 /**
@@ -37,7 +42,7 @@ function updatePresetList() {
 }
 
 /**
- * ✅ MEJORADO: Guarda la configuración actual como un nuevo preset.
+ * Guarda la configuración actual como un nuevo preset.
  */
 function savePreset() {
     const name = elements.presetNameInput.value.trim();
@@ -49,30 +54,33 @@ function savePreset() {
     const currentState = getState();
     const presets = JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || '{}');
 
-    // ✅ CORREGIDO: Guardamos tanto config como curves
     presets[name] = {
         config: {
             effect: currentState.config.effect,
             isMonochrome: currentState.config.isMonochrome,
             useOriginalColor: currentState.config.useOriginalColor,
             colorCount: currentState.config.colorCount,
-            colors: [...currentState.config.colors], // Copia del array
+            colors: [...currentState.config.colors],
             ditherScale: currentState.config.ditherScale,
             serpentineScan: currentState.config.serpentineScan,
             diffusionStrength: currentState.config.diffusionStrength,
             patternStrength: currentState.config.patternStrength,
             brightness: currentState.config.brightness,
             contrast: currentState.config.contrast,
-            saturation: currentState.config.saturation
+            saturation: currentState.config.saturation,
+            halftoneSize: currentState.config.halftoneSize,
+            nativeQualityMode: currentState.config.nativeQualityMode,
+            sharpeningStrength: currentState.config.sharpeningStrength,
+            errorGamma: currentState.config.errorGamma,
+            diffusionNoise: currentState.config.diffusionNoise,
+            patternMix: currentState.config.patternMix
         },
-        // ✅ Guardamos las curvas (deep copy)
         curves: {
             rgb: JSON.parse(JSON.stringify(currentState.curves.rgb)),
             r: JSON.parse(JSON.stringify(currentState.curves.r)),
             g: JSON.parse(JSON.stringify(currentState.curves.g)),
             b: JSON.parse(JSON.stringify(currentState.curves.b))
         },
-        // ✅ Metadatos útiles
         timestamp: new Date().toISOString(),
         version: '7.0'
     };
@@ -89,7 +97,7 @@ function savePreset() {
 }
 
 /**
- * ✅ MEJORADO: Carga un preset seleccionado del menú desplegable.
+ * Carga un preset seleccionado del menú desplegable.
  */
 function loadPreset() {
     const name = elements.presetSelect.value;
@@ -103,14 +111,12 @@ function loadPreset() {
 
     const presetData = presets[name];
 
-    // ✅ CORREGIDO: Actualizamos config y curves por separado
     if (presetData.config) {
         updateConfig(presetData.config);
     }
 
     if (presetData.curves) {
         updateCurves(presetData.curves);
-        // ✅ Emitir evento para que el editor de curvas actualice su UI
         events.emit('presets:loaded', presetData);
     }
 
@@ -134,7 +140,6 @@ function deletePreset() {
         return;
     }
 
-    // Confirmación antes de eliminar
     if (!confirm(`¿Estás seguro de eliminar el preset "${name}"?`)) {
         return;
     }
@@ -146,7 +151,7 @@ function deletePreset() {
 }
 
 /**
- * ✅ AÑADIDO: Exportar preset como archivo JSON
+ * ✅ NUEVA FUNCIÓN: Exporta el preset seleccionado como archivo JSON.
  */
 function exportPreset() {
     const name = elements.presetSelect.value;
@@ -172,13 +177,15 @@ function exportPreset() {
     link.click();
     
     URL.revokeObjectURL(url);
-    showToast(`Preset "${name}" exportado.`);
+    showToast(`Preset "${name}" exportado como JSON.`);
 }
 
 /**
- * ✅ AÑADIDO: Importar preset desde archivo JSON
+ * ✅ NUEVA FUNCIÓN: Importa un preset desde un archivo JSON.
  */
 function importPreset(file) {
+    if (!file) return;
+    
     const reader = new FileReader();
     
     reader.onload = (e) => {
@@ -187,7 +194,7 @@ function importPreset(file) {
             
             // Validar estructura del preset
             if (!presetData.config || !presetData.curves) {
-                showToast('Archivo de preset inválido.', 3000);
+                showToast('Archivo de preset inválido. Falta config o curves.', 3000);
                 return;
             }
 
@@ -204,11 +211,15 @@ function importPreset(file) {
             presets[presetName] = presetData;
             localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
             updatePresetList();
+            
+            // Seleccionar el preset importado
+            elements.presetSelect.value = presetName;
+            
             showToast(`Preset importado como "${presetName}".`);
             
         } catch (error) {
             console.error('Error al importar preset:', error);
-            showToast('Error al leer el archivo de preset.', 3000);
+            showToast('Error al leer el archivo. Asegúrate de que sea un JSON válido.', 3000);
         }
     };
     
@@ -220,28 +231,67 @@ function importPreset(file) {
 }
 
 /**
+ * ✅ NUEVA FUNCIÓN: Trigger para abrir el selector de archivos.
+ */
+function triggerImport() {
+    if (elements.importPresetFile) {
+        elements.importPresetFile.click();
+    }
+}
+
+/**
  * Inicializa el módulo de presets.
  */
 export function initializePresets() {
     queryElements();
 
-    elements.savePresetBtn.addEventListener('click', savePreset);
-    elements.presetSelect.addEventListener('change', loadPreset);
-    elements.deletePresetBtn.addEventListener('click', deletePreset);
+    // Eventos básicos
+    if (elements.savePresetBtn) {
+        elements.savePresetBtn.addEventListener('click', savePreset);
+    }
+    
+    if (elements.presetSelect) {
+        elements.presetSelect.addEventListener('change', loadPreset);
+    }
+    
+    if (elements.deletePresetBtn) {
+        elements.deletePresetBtn.addEventListener('click', deletePreset);
+    }
 
-    // ✅ MEJORADO: Soporte para tecla Enter al escribir nombre
-    elements.presetNameInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            savePreset();
-        }
-    });
+    // ✅ NUEVOS EVENTOS: Export/Import
+    if (elements.exportPresetBtn) {
+        elements.exportPresetBtn.addEventListener('click', exportPreset);
+    }
+    
+    if (elements.importPresetBtn) {
+        elements.importPresetBtn.addEventListener('click', triggerImport);
+    }
+    
+    if (elements.importPresetFile) {
+        elements.importPresetFile.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importPreset(e.target.files[0]);
+                // Limpiar el input para permitir reimportar el mismo archivo
+                e.target.value = '';
+            }
+        });
+    }
+
+    // Soporte para tecla Enter al escribir nombre
+    if (elements.presetNameInput) {
+        elements.presetNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                savePreset();
+            }
+        });
+    }
 
     // Llenar la lista de presets al iniciar la app
     updatePresetList();
 
     console.log('Presets Module inicializado.');
     
-    // ✅ Log de debug para verificar presets existentes
+    // Log de debug
     const presets = JSON.parse(localStorage.getItem(PRESETS_STORAGE_KEY) || '{}');
     console.log(`Presets cargados: ${Object.keys(presets).length}`);
 }
