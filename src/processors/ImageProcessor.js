@@ -7,7 +7,7 @@
 import { imageAdjustments } from './ImageAdjustments.js';
 import { curveProcessor } from './CurveProcessor.js';
 import { algorithmRegistry } from '../algorithms/AlgorithmRegistry.js';
-// Importa todos los algoritmos para registrarlos
+// (NUEVO) Importar correctamente todas las instancias de algoritmos
 import FloydSteinberg from '../algorithms/ErrorDiffusion/FloydSteinberg.js';
 import Atkinson from '../algorithms/ErrorDiffusion/Atkinson.js';
 import Stucki from '../algorithms/ErrorDiffusion/Stucki.js';
@@ -27,9 +27,22 @@ class ImageProcessor {
     this.registerAlgorithms();
   }
 
+  /**
+   * Registra todos los algoritmos disponibles en el sistema.
+   */
   registerAlgorithms() {
+      // (NUEVO) Registrar la lista completa de algoritmos importados.
       algorithmRegistry.register(FloydSteinberg);
-      // ... (el resto de los registros se mantienen igual)
+      algorithmRegistry.register(Atkinson);
+      algorithmRegistry.register(Stucki);
+      algorithmRegistry.register(JarvisJudiceNinke);
+      algorithmRegistry.register(Sierra);
+      algorithmRegistry.register(SierraLite);
+      algorithmRegistry.register(Burkes);
+      algorithmRegistry.register(Bayer);
+      algorithmRegistry.register(BlueNoise);
+      algorithmRegistry.register(VariableError);
+      algorithmRegistry.register(Posterize);
   }
 
   addNoise(pixels) {
@@ -53,7 +66,6 @@ class ImageProcessor {
     
     const algorithm = algorithmRegistry.get(config.effect);
     if (algorithm) {
-        // (NUEVO) La lógica de `useOriginalColor` ahora se pasa al algoritmo.
         if (!config.useOriginalColor) {
             const p5colors = this.utils.colorCache.getColors(config.colors);
             this.utils.lumaLUT.build(p5colors, buffer);
