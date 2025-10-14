@@ -34,6 +34,8 @@ class CanvasManager {
   init() {
     this.p5 = new p5(this.sketch, this.container);
     eventBus.subscribe('state:updated', () => this.requestRedraw());
+    // (NUEVO) Suscribirse al evento para redimensionar el canvas cuando se carga un nuevo medio.
+    eventBus.subscribe('canvas:resize', () => this.resizeCanvasToContainer());
   }
 
   /**
@@ -55,9 +57,8 @@ class CanvasManager {
         blueNoiseLUT: new BlueNoiseLUT()
     });
     
-    // El MediaLoader necesita la instancia de p5 para funcionar
     eventBus.publish('canvas:ready', p);
-    this.resizeCanvasToContainer(); // Ajustar al tamaño inicial del contenedor
+    this.resizeCanvasToContainer();
     this.requestRedraw();
   }
 
@@ -87,13 +88,10 @@ class CanvasManager {
     
     const buffer = this.bufferPool.get(p, bufferWidth, bufferHeight);
     
-    // Dibuja el medio en el buffer a la escala correcta
     buffer.image(state.media.instance, 0, 0, bufferWidth, bufferHeight);
     
-    // Aplica todo el pipeline de procesamiento al buffer
     const processedBuffer = this.imageProcessor.process(buffer, state.config);
 
-    // Dibuja el buffer procesado en el canvas principal
     p.image(processedBuffer, 0, 0, p.width, p.height);
 
     eventBus.publish('canvas:drawn');
@@ -143,7 +141,7 @@ class CanvasManager {
       const containerHeight = this.container.clientHeight;
       const { media } = store.getState();
 
-      let mediaRatio = 16 / 9; // Ratio por defecto
+      let mediaRatio = 16 / 9; 
       if (media.isLoaded && media.width > 0 && media.height > 0) {
           mediaRatio = media.width / media.height;
       }
