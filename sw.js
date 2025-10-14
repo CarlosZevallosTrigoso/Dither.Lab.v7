@@ -1,10 +1,10 @@
 const CACHE_NAME = 'ditherlab-v7-robust-20251014';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/styles.css',
-  '/js/gif.worker.js',
+  './',
+  './index.html',
+  './manifest.json',
+  './css/styles.css',
+  './js/gif.worker.js',
   'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js'
