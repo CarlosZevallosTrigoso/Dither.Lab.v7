@@ -41,7 +41,6 @@ class CurvesEditor {
     this.canvas.addEventListener('mouseleave', this.onMouseUp.bind(this));
   }
 
-  // ✅ IMPLEMENTADO: Detectar click en puntos o crear nuevos
   onMouseDown(e) {
     const rect = this.canvas.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 255;
@@ -72,7 +71,6 @@ class CurvesEditor {
     }
   }
 
-  // ✅ IMPLEMENTADO: Mover puntos y mostrar coordenadas
   onMouseMove(e) {
     const rect = this.canvas.getBoundingClientRect();
     const x = Math.round(((e.clientX - rect.left) / rect.width) * 255);
@@ -123,7 +121,6 @@ class CurvesEditor {
     this.isDragging = false; 
   }
 
-  // ✅ IMPLEMENTADO: Eliminar puntos con doble click
   onDoubleClick(e) {
     const rect = this.canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -182,7 +179,6 @@ class CurvesEditor {
     this.notifyUpdate();
   }
 
-  // ✅ IMPLEMENTADO: Renderizado completo del canvas
   render() {
     const ctx = this.ctx;
     const w = this.width;
@@ -267,7 +263,6 @@ class CurvesEditor {
     }
   }
   
-  // ✅ IMPLEMENTADO: Generar Look-Up Table para aplicar la curva
   getLUT(channel) {
     const points = this.curves[channel];
     const lut = new Uint8Array(256);
@@ -295,13 +290,8 @@ class CurvesEditor {
     };
   }
   
-  /**
-   * Notifica al resto de la aplicación que las curvas han cambiado.
-   */
   notifyUpdate() {
-    // Actualizar el estado global de curves
     updateCurves(this.curves);
-    // Actualizar las LUTs en config
     updateConfig({ curvesLUTs: this.getAllLUTs() });
   }
 }
@@ -329,6 +319,12 @@ export function initializeCurvesEditor() {
         editor.resetAllChannels();
     });
 
+    // ✅ AÑADIDO: Escuchar cuando el editor se muestra/oculta para re-renderizar
+    events.on('ui:curves-editor-toggled', () => {
+        // Pequeño delay para asegurar que el canvas esté visible
+        setTimeout(() => editor.render(), 50);
+    });
+
     // Escuchar eventos globales para cargar presets
     events.on('presets:loaded', (presetData) => {
         if (presetData.curves) {
@@ -342,8 +338,6 @@ export function initializeCurvesEditor() {
     events.on('curves:reset-all', () => {
         editor.resetAllChannels();
     });
-    
-    events.on('ui:curves-editor-toggled', () => editor.render());
     
     console.log('Curves Editor inicializado.');
 }
