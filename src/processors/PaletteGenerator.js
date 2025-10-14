@@ -8,11 +8,18 @@ class PaletteGenerator {
   /**
    * Genera una paleta de 'k' colores a partir de un medio.
    * @param {p5.MediaElement | p5.Image} media - El medio del cual extraer los colores.
-   * @param {number} k - El número de colores a generar.
+   * @param {object} config - La configuración de la aplicación, para saber si es monocromo.
    * @param {p5} p - La instancia de p5.
    * @returns {Promise<string[]>} Una promesa que resuelve a un array de colores hexadecimales.
    */
-  async generate(media, k, p) {
+  async generate(media, config, p) {
+    const k = config.colorCount;
+
+    // Si está en modo Blanco y Negro, genera una paleta de grises y termina.
+    if (config.isMonochrome) {
+        return this.generateGrayscalePalette(k);
+    }
+    
     const tempCanvas = p.createGraphics(100, 100);
     tempCanvas.pixelDensity(1);
 
@@ -32,7 +39,7 @@ class PaletteGenerator {
       // Asigna cada píxel a su centroide más cercano
       const assignments = this.assignToCentroids(pixels, centroids);
       // Calcula los nuevos centroides a partir del promedio de los píxeles asignados
-      const newCentroids = this.calculateNewCentroids(pixels, assignments, k, centroids); // <--- CORRECCIÓN AQUÍ
+      const newCentroids = this.calculateNewCentroids(pixels, assignments, k, centroids);
       
       // Si los centroides no cambian, hemos convergido
       if (this.haveCentroidsConverged(centroids, newCentroids)) {
@@ -43,6 +50,22 @@ class PaletteGenerator {
 
     // 3. Formatea y ordena los colores resultantes
     return this.formatCentroids(centroids);
+  }
+
+  /**
+   * Genera una paleta de grises distribuida uniformemente.
+   * @param {number} k - El número de colores (grises) a generar.
+   * @returns {string[]} Un array de colores hexadecimales en escala de grises.
+   */
+  generateGrayscalePalette(k) {
+      if (k < 2) return ['#000000'];
+      const palette = [];
+      for (let i = 0; i < k; i++) {
+          const value = Math.round(255 * (i / (k - 1)));
+          const hex = value.toString(16).padStart(2, '0');
+          palette.push(`#${hex}${hex}${hex}`);
+      }
+      return palette;
   }
 
   /**
@@ -116,7 +139,7 @@ class PaletteGenerator {
   /**
    * Calcula los nuevos centroides promediando los píxeles asignados.
    */
-  calculateNewCentroids(pixels, assignments, k, oldCentroids) { // <--- CORRECCIÓN AQUÍ
+  calculateNewCentroids(pixels, assignments, k, oldCentroids) {
     const newCentroids = Array.from({ length: k }, () => [0, 0, 0]);
     const counts = new Array(k).fill(0);
 
@@ -131,7 +154,7 @@ class PaletteGenerator {
     return newCentroids.map((centroid, i) =>
       counts[i] > 0
         ? [Math.round(centroid[0] / counts[i]), Math.round(centroid[1] / counts[i]), Math.round(centroid[2] / counts[i])]
-        : oldCentroids[i] // Si un centroide no tiene píxeles, se mantiene <--- CORRECCIÓN AQUÍ
+        : oldCentroids[i] // Si un centroide no tiene píxeles, se mantiene
     );
   }
 
