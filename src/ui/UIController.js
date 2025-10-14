@@ -5,12 +5,20 @@
  */
 import { store } from '../core/Store.js';
 import { eventBus } from '../core/EventBus.js';
-import { Toast, toast } from './utils/Toast.js';
+import { toast } from './utils/Toast.js';
 import { Modal } from './utils/Modal.js';
+
+// Importar todos los paneles
 import { MediaPanel } from './components/MediaPanel.js';
 import { AlgorithmPanel } from './components/AlgorithmPanel.js';
 import { PalettePanel } from './components/PalettePanel.js';
-// (Importaremos los otros paneles en las siguientes fases)
+import { ImageAdjustmentsPanel } from './components/ImageAdjustmentsPanel.js';
+import { CurvesEditor } from './components/CurvesEditor.js';
+import { TimelinePanel } from './components/TimelinePanel.js';
+import { ExportPanel } from './components/ExportPanel.js';
+import { PresetsPanel } from './components/PresetsPanel.js';
+import { MetricsPanel } from './components/MetricsPanel.js';
+import { StatsPanel } from './components/StatsPanel.js';
 
 export class UIController {
   constructor() {
@@ -20,13 +28,10 @@ export class UIController {
     this.modals = {};
   }
 
-  /**
-   * Inicializa todos los componentes de la UI.
-   */
   init() {
     this.initComponents();
     this.initGlobalListeners();
-    console.log('UI Controller inicializado.');
+    console.log('UI Controller inicializado con todos los paneles.');
   }
 
   initComponents() {
@@ -34,7 +39,13 @@ export class UIController {
     this.panels.media = new MediaPanel();
     this.panels.algorithm = new AlgorithmPanel();
     this.panels.palette = new PalettePanel();
-    // (Añadiremos más paneles aquí)
+    this.panels.imageAdjustments = new ImageAdjustmentsPanel();
+    this.panels.curvesEditor = new CurvesEditor(); // El editor de curvas también es un panel
+    this.panels.timeline = new TimelinePanel();
+    this.panels.export = new ExportPanel();
+    this.panels.presets = new PresetsPanel();
+    this.panels.metrics = new MetricsPanel();
+    this.panels.stats = new StatsPanel();
 
     for (const panelName in this.panels) {
       this.panels[panelName].init();
@@ -48,33 +59,42 @@ export class UIController {
     this.modals.metrics.bindOpenButton('metricsBtn');
   }
 
-  /**
-   * Inicializa listeners para eventos que no pertenecen a un panel específico.
-   */
   initGlobalListeners() {
-    // Listener para mostrar notificaciones toast
-    this.eventBus.subscribe('ui:showToast', (data) => {
-      toast.show(data.message, data.duration);
-    });
+    this.eventBus.subscribe('ui:showToast', (data) => toast.show(data.message, data.duration));
+    
+    // Conectar eventos del núcleo a paneles específicos
+    this.eventBus.subscribe('stats:update', (stats) => this.panels.stats.updateFrameStats(stats));
+    this.eventBus.subscribe('metrics:updated', (metrics) => this.panels.metrics.updateMetrics(metrics));
 
-    // Listener para el atajo de teclado de pantalla completa
     document.addEventListener('keydown', (e) => {
-        // Ignorar si se está escribiendo en un input
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-
-        if (e.key.toLowerCase() === 'f') {
-            this.toggleFullscreen();
-        }
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      
+      const keyMap = {
+          ' ': () => this.eventBus.publish('playback:toggle'),
+          'arrowleft': () => this.eventBus.publish('playback:step-frame', -1),
+          'arrowright': () => this.eventBus.publish('playback:step-frame', 1),
+          'i': () => this.eventBus.publish('timeline:set-marker', 'in'),
+          'o': () => this.eventBus.publish('timeline:set-marker', 'out'),
+          'd': () => this.eventBus.publish('export:start', { format: 'png' }),
+          'f': () => this.toggleFullscreen(),
+          '?': () => this.modals.shortcuts.open(),
+      };
+      
+      const action = keyMap[e.key.toLowerCase()];
+      if (action) {
+        e.preventDefault();
+        action();
+      }
     });
   }
   
   toggleFullscreen() {
     if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            console.error(`Error al intentar entrar en pantalla completa: ${err.message} (${err.name})`);
-        });
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error al entrar en pantalla completa: ${err.message}`);
+      });
     } else {
-        document.exitFullscreen();
+      document.exitFullscreen();
     }
   }
 }
