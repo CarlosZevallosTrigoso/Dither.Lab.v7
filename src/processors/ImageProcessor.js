@@ -45,6 +45,20 @@ class ImageProcessor {
   }
 
   /**
+   * Añade una cantidad sutil de ruido para evitar el "clamping" en colores puros.
+   * @param {Uint8ClampedArray} pixels - El array de píxeles.
+   */
+  addNoise(pixels) {
+      for (let i = 0; i < pixels.length; i += 4) {
+          // Añade un valor aleatorio entre -2 y 2 a cada canal de color.
+          const noise = (Math.random() - 0.5) * 4;
+          pixels[i] = Math.max(0, Math.min(255, pixels[i] + noise));
+          pixels[i+1] = Math.max(0, Math.min(255, pixels[i+1] + noise));
+          pixels[i+2] = Math.max(0, Math.min(255, pixels[i+2] + noise));
+      }
+  }
+
+  /**
    * Procesa un buffer de imagen a través del pipeline completo.
    * @param {p5.Graphics} buffer - El buffer con la imagen original.
    * @param {object} config - La configuración de procesamiento del estado.
@@ -53,6 +67,11 @@ class ImageProcessor {
   process(buffer, config) {
     buffer.loadPixels();
     
+    // 0. (NUEVO) Añadir ruido para solucionar el problema del clamping.
+    if (config.effect !== 'none' && config.effect !== 'posterize' && !config.useOriginalColor) {
+        this.addNoise(buffer.pixels);
+    }
+
     // 1. Aplicar ajustes de imagen (brillo, contraste, saturación)
     imageAdjustments.apply(buffer.pixels, config);
 
@@ -64,11 +83,10 @@ class ImageProcessor {
         buffer.updatePixels();
         return buffer;
     }
-
+    
     // 4. Aplicar el algoritmo de dithering seleccionado
     const algorithm = algorithmRegistry.get(config.effect);
     if (algorithm) {
-        // Actualizar la LumaLUT con la paleta actual
         const p5colors = this.utils.colorCache.getColors(config.colors);
         this.utils.lumaLUT.build(p5colors, buffer);
 
