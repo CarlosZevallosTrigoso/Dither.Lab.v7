@@ -14,7 +14,10 @@ import { BlueNoiseLUT } from '../algorithms/utils/BlueNoiseLUT.js';
 
 class CanvasManager {
   constructor(containerId) {
-    this.containerId = containerId;
+    this.container = document.getElementById(containerId);
+    if (!this.container) {
+        throw new Error(`Contenedor con id "${containerId}" no encontrado.`);
+    }
     this.p5 = null;
     this.needsRedraw = true;
     this.bufferPool = new BufferPool();
@@ -29,7 +32,7 @@ class CanvasManager {
    * Inicializa la instancia de p5.js.
    */
   init() {
-    this.p5 = new p5(this.sketch, this.containerId);
+    this.p5 = new p5(this.sketch, this.container);
     eventBus.subscribe('state:updated', () => this.requestRedraw());
   }
 
@@ -37,8 +40,7 @@ class CanvasManager {
    * Configuración inicial del sketch de p5.js.
    */
   setup(p) {
-    const { width, height } = store.getState().canvas;
-    const canvas = p.createCanvas(width, height);
+    const canvas = p.createCanvas(400, 225); // Tamaño inicial
     canvas.elt.getContext('2d', { willReadFrequently: true, alpha: false });
     p.pixelDensity(1);
     p.noSmooth();
@@ -55,6 +57,7 @@ class CanvasManager {
     
     // El MediaLoader necesita la instancia de p5 para funcionar
     eventBus.publish('canvas:ready', p);
+    this.resizeCanvasToContainer(); // Ajustar al tamaño inicial del contenedor
     this.requestRedraw();
   }
 
@@ -130,11 +133,31 @@ class CanvasManager {
     }
   }
 
-  resize(width, height) {
-      if (this.p5) {
-          this.p5.resizeCanvas(width, height);
-          this.requestRedraw();
+  /**
+   * Redimensiona el canvas para que se ajuste a su contenedor manteniendo el aspect ratio del medio.
+   */
+  resizeCanvasToContainer() {
+      if (!this.p5) return;
+
+      const containerWidth = this.container.clientWidth;
+      const containerHeight = this.container.clientHeight;
+      const { media } = store.getState();
+
+      let mediaRatio = 16 / 9; // Ratio por defecto
+      if (media.isLoaded && media.width > 0 && media.height > 0) {
+          mediaRatio = media.width / media.height;
       }
+      
+      let newWidth = containerWidth;
+      let newHeight = newWidth / mediaRatio;
+
+      if (newHeight > containerHeight) {
+          newHeight = containerHeight;
+          newWidth = newHeight * mediaRatio;
+      }
+
+      this.p5.resizeCanvas(Math.floor(newWidth), Math.floor(newHeight));
+      this.requestRedraw();
   }
 }
 
