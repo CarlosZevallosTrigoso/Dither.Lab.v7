@@ -6,8 +6,6 @@
  * - Este archivo ahora solo contiene la lógica para aplicar los ajustes de
  * imagen (brillo, contraste, curvas, nitidez) en el hilo principal
  * antes de enviar los datos al worker.
- * - Se mantiene el algoritmo Halftone aquí, ya que depende directamente de las
- * funciones de dibujo de p5.js y no puede ir al worker.
  * ============================================================================
  */
 
@@ -89,61 +87,5 @@ export function applyImageAdjustments(pixels, config, width, height) {
         pixels[i] = r;
         pixels[i + 1] = g;
         pixels[i + 2] = b;
-    }
-}
-
-/**
- * ✅ MEJORADO: El algoritmo Halftone ahora usa la paleta de colores.
- * Dibuja usando el color más claro y el más oscuro de la paleta.
- */
-export function drawHalftoneDither(p, buffer, src, config) {
-    const pw = buffer.width;
-    const ph = buffer.height;
-    const tempPixels = src.pixels;
-    
-    // Encontrar los colores más claros y oscuros de la paleta
-    let lightestColor = p.color(255);
-    let darkestColor = p.color(0);
-
-    if (config.colors && config.colors.length > 0) {
-        const p5colors = config.colors.map(hex => p.color(hex));
-        p5colors.sort((a, b) => p.lightness(a) - p.lightness(b));
-        lightestColor = p5colors[p5colors.length - 1];
-        darkestColor = p5colors[0];
-    }
-    
-    buffer.background(lightestColor);
-    buffer.noStroke();
-    buffer.fill(darkestColor);
-    
-    const cellSize = config.halftoneSize;
-    const k = cellSize / 255;
-    
-    for (let y = 0; y < ph; y += cellSize) {
-        for (let x = 0; x < pw; x += cellSize) {
-            let totalLuma = 0;
-            let pixelCount = 0;
-            
-            for (let j = 0; j < cellSize; j++) {
-                for (let i = 0; i < cellSize; i++) {
-                    const px = x + i;
-                    const py = y + j;
-                    if (px < pw && py < ph) {
-                        const pixIndex = (py * pw + px) * 4;
-                        const r = tempPixels[pixIndex];
-                        const g = tempPixels[pixIndex + 1];
-                        const b = tempPixels[pixIndex + 2];
-                        totalLuma += (r * 0.299 + g * 0.587 + b * 0.114);
-                        pixelCount++;
-                    }
-                }
-            }
-            
-            if (pixelCount > 0) {
-                const avgLuma = totalLuma / pixelCount;
-                const dotSize = (255 - avgLuma) * k;
-                buffer.ellipse(x + cellSize / 2, y + cellSize / 2, dotSize, dotSize);
-            }
-        }
     }
 }
