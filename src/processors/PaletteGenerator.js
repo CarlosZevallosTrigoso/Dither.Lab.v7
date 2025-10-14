@@ -32,7 +32,7 @@ class PaletteGenerator {
       // Asigna cada píxel a su centroide más cercano
       const assignments = this.assignToCentroids(pixels, centroids);
       // Calcula los nuevos centroides a partir del promedio de los píxeles asignados
-      const newCentroids = this.calculateNewCentroids(pixels, assignments, k);
+      const newCentroids = this.calculateNewCentroids(pixels, assignments, k, centroids); // <--- CORRECCIÓN AQUÍ
       
       // Si los centroides no cambian, hemos convergido
       if (this.haveCentroidsConverged(centroids, newCentroids)) {
@@ -116,7 +116,7 @@ class PaletteGenerator {
   /**
    * Calcula los nuevos centroides promediando los píxeles asignados.
    */
-  calculateNewCentroids(pixels, assignments, k) {
+  calculateNewCentroids(pixels, assignments, k, oldCentroids) { // <--- CORRECCIÓN AQUÍ
     const newCentroids = Array.from({ length: k }, () => [0, 0, 0]);
     const counts = new Array(k).fill(0);
 
@@ -131,7 +131,7 @@ class PaletteGenerator {
     return newCentroids.map((centroid, i) =>
       counts[i] > 0
         ? [Math.round(centroid[0] / counts[i]), Math.round(centroid[1] / counts[i]), Math.round(centroid[2] / counts[i])]
-        : centroids[i] // Si un centroide no tiene píxeles, se mantiene
+        : oldCentroids[i] // Si un centroide no tiene píxeles, se mantiene <--- CORRECCIÓN AQUÍ
     );
   }
 
