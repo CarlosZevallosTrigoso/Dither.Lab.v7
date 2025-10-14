@@ -4,11 +4,11 @@ const CACHE_NAME = 'ditherlab-v7-modular-20251014';
 
 // Lista de archivos a cachear. Las rutas deben coincidir con la nueva estructura.
 const urlsToCache = [
-  './',
-  './index.html',
-  './manifest.json',
-  './css/styles.css',
-  './js/gif.worker.js',
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/css/styles.css',
+  '/js/gif.worker.js',
   // URLs de librerías externas
   'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js',
   'https://cdn.tailwindcss.com',
