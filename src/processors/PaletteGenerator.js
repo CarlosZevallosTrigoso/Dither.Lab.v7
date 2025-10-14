@@ -15,7 +15,6 @@ class PaletteGenerator {
   async generate(media, config, p) {
     const k = config.colorCount;
 
-    // Si está en modo Blanco y Negro, genera una paleta de grises y termina.
     if (config.isMonochrome) {
         return this.generateGrayscalePalette(k);
     }
@@ -23,7 +22,6 @@ class PaletteGenerator {
     const tempCanvas = p.createGraphics(100, 100);
     tempCanvas.pixelDensity(1);
 
-    // Dibuja el medio en un canvas temporal de baja resolución para un análisis rápido.
     tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
     tempCanvas.loadPixels();
     const pixels = this.getRGBPixels(tempCanvas.pixels);
@@ -31,24 +29,18 @@ class PaletteGenerator {
 
     if (pixels.length === 0) return [];
 
-    // 1. Inicialización de centroides con K-Means++
     let centroids = this.initializeCentroids(pixels, k);
 
-    // 2. Iteraciones de K-Means
     for (let iter = 0; iter < 15; iter++) {
-      // Asigna cada píxel a su centroide más cercano
       const assignments = this.assignToCentroids(pixels, centroids);
-      // Calcula los nuevos centroides a partir del promedio de los píxeles asignados
       const newCentroids = this.calculateNewCentroids(pixels, assignments, k, centroids);
       
-      // Si los centroides no cambian, hemos convergido
       if (this.haveCentroidsConverged(centroids, newCentroids)) {
         break;
       }
       centroids = newCentroids;
     }
 
-    // 3. Formatea y ordena los colores resultantes
     return this.formatCentroids(centroids);
   }
 
@@ -68,11 +60,6 @@ class PaletteGenerator {
       return palette;
   }
 
-  /**
-   * Extrae los píxeles como arrays [R, G, B].
-   * @param {Uint8ClampedArray} pixelsData - Array de píxeles de un canvas.
-   * @returns {Array<[number, number, number]>}
-   */
   getRGBPixels(pixelsData) {
     const pixels = [];
     for (let i = 0; i < pixelsData.length; i += 4) {
@@ -81,16 +68,10 @@ class PaletteGenerator {
     return pixels;
   }
 
-  /**
-   * Calcula la distancia euclidiana al cuadrado entre dos colores.
-   */
   colorDistanceSq(c1, c2) {
     return ((c1[0] - c2[0]) ** 2) + ((c1[1] - c2[1]) ** 2) + ((c1[2] - c2[2]) ** 2);
   }
 
-  /**
-   * Inicializa los centroides usando la estrategia K-Means++.
-   */
   initializeCentroids(pixels, k) {
     const centroids = [];
     centroids.push(pixels[Math.floor(Math.random() * pixels.length)]);
@@ -118,9 +99,6 @@ class PaletteGenerator {
     return centroids;
   }
 
-  /**
-   * Asigna cada píxel al índice del centroide más cercano.
-   */
   assignToCentroids(pixels, centroids) {
     return pixels.map(pixel => {
       let minDistanceSq = Infinity;
@@ -136,47 +114,41 @@ class PaletteGenerator {
     });
   }
 
-  /**
-   * Calcula los nuevos centroides promediando los píxeles asignados.
-   */
   calculateNewCentroids(pixels, assignments, k, oldCentroids) {
     const newCentroids = Array.from({ length: k }, () => [0, 0, 0]);
     const counts = new Array(k).fill(0);
 
     pixels.forEach((pixel, i) => {
       const centroidIndex = assignments[i];
-      newCentroids[centroidIndex][0] += pixel[0];
-      newCentroids[centroidIndex][1] += pixel[1];
-      newCentroids[centroidIndex][2] += pixel[2];
-      counts[centroidIndex]++;
+      // Añadir una comprobación para evitar errores si el índice es inválido
+      if (newCentroids[centroidIndex]) {
+          newCentroids[centroidIndex][0] += pixel[0];
+          newCentroids[centroidIndex][1] += pixel[1];
+          newCentroids[centroidIndex][2] += pixel[2];
+          counts[centroidIndex]++;
+      }
     });
 
     return newCentroids.map((centroid, i) =>
       counts[i] > 0
         ? [Math.round(centroid[0] / counts[i]), Math.round(centroid[1] / counts[i]), Math.round(centroid[2] / counts[i])]
-        : oldCentroids[i] // Si un centroide no tiene píxeles, se mantiene
+        : oldCentroids[i]
     );
   }
 
-  /**
-   * Comprueba si los centroides han dejado de moverse.
-   */
   haveCentroidsConverged(oldCentroids, newCentroids, threshold = 1) {
+    if (!oldCentroids || !newCentroids || oldCentroids.length !== newCentroids.length) return false;
     for (let i = 0; i < oldCentroids.length; i++) {
-      if (this.colorDistanceSq(oldCentroids[i], newCentroids[i]) > threshold) {
+      if (!oldCentroids[i] || !newCentroids[i] || this.colorDistanceSq(oldCentroids[i], newCentroids[i]) > threshold) {
         return false;
       }
     }
     return true;
   }
 
-  /**
-   * Formatea los centroides a strings hexadecimales y los ordena por luminancia.
-   */
   formatCentroids(centroids) {
     const toHex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
     
-    // Ordenar por luminancia para una apariencia más agradable
     return centroids
       .sort((a, b) => 
         (a[0] * 0.299 + a[1] * 0.587 + a[2] * 0.114) - 
