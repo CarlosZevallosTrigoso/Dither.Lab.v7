@@ -1,17 +1,17 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Renderizado (Refactorizado para Worker)
+ * DitherLab v7 - Módulo de Renderizado (VERSIÓN CORREGIDA Y FINAL)
  * ============================================================================
  * - Se comunica con el Web Worker para el procesamiento de dithering.
- * - Gestiona el ciclo de vida: envía datos al worker, recibe los resultados y
+ * - Gestiona el ciclo de vida: prepara el buffer, aplica ajustes de imagen
+ * (brillo, nitidez, etc.), envía los datos al worker, recibe los resultados y
  * actualiza el canvas.
- * - Mantiene la interfaz de usuario completamente fluida y sin bloqueos.
  * ============================================================================
  */
 import { events } from '../app/events.js';
 import { getState } from '../app/state.js';
 import { BufferPool, LumaLUT } from '../utils/optimizations.js';
-import { applyImageAdjustments, drawHalftoneDither } from './algorithms.js';
+import { applyImageAdjustments } from './algorithms.js';
 import { calculatePSNR, calculateSSIM, calculateCompression } from './metrics.js';
 import { debounce } from '../utils/helpers.js';
 
@@ -68,9 +68,8 @@ export function sketch(p) {
 
         ditherWorker.onmessage = (e) => {
             const imageData = e.data;
-            
             if (!imageData || typeof imageData.width === 'undefined') {
-                console.error("Mensaje inválido o corrupto recibido del worker:", e.data);
+                console.error("Mensaje inválido recibido del worker:", e.data);
                 isProcessing = false;
                 return;
             }
@@ -148,14 +147,8 @@ export function sketch(p) {
             return;
         }
 
-        const isDitheringActive = config.effect !== 'none';
-        const p5colors = config.colors.map(hex => p.color(hex));
+        const isDitheringActive = config.effect !== 'none' && config.effect !== 'posterize';
         
-        // ✅ CORRECCIÓN: Ligeramente modificado para chequear si el LUT necesita reconstruirse
-        if (lumaLUT.needsRebuild(p5colors)) {
-            lumaLUT.build(p5colors, p);
-        }
-
         let pw, ph;
         if (config.nativeQualityMode) {
             pw = p.width;
@@ -169,26 +162,42 @@ export function sketch(p) {
         const buffer = bufferPool.get(pw, ph, p);
         buffer.image(media, 0, 0, pw, ph);
         buffer.loadPixels();
-        applyImageAdjustments(buffer.pixels, config, pw, ph);
 
-        if (config.effect === 'halftone-dither' || !isDitheringActive) {
-            if (config.effect === 'halftone-dither') {
-                drawHalftoneDither(p, buffer, buffer, config);
+        // ✅ CORRECCIÓN CLAVE: Aplicar ajustes de imagen ANTES de cualquier otra cosa.
+        // Esto asegura que brillo, contraste, nitidez, etc., siempre funcionen.
+        applyImageAdjustments(buffer.pixels, config, pw, ph);
+        
+        if (isDitheringActive) {
+            isProcessing = true;
+            const p5colors = config.colors.map(hex => p.color(hex));
+            if (lumaLUT.needsRebuild(p5colors)) {
+                lumaLUT.build(p5colors, p);
             }
+            
+            const imageData = buffer.drawingContext.getImageData(0, 0, pw, ph);
+            ditherWorker.postMessage({ imageData, config, lumaLUT: lumaLUT.lut, pw, ph }, [imageData.data.buffer]);
+        
+        } else { // Para 'none' y 'posterize'
+            if (config.effect === 'posterize') {
+                const p5colors = config.colors.map(hex => p.color(hex));
+                if (lumaLUT.needsRebuild(p5colors)) {
+                    lumaLUT.build(p5colors, p);
+                }
+                
+                const pixels = buffer.pixels;
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const luma = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
+                    const [r, g, b] = lumaLUT.map(luma);
+                    pixels[i] = r;
+                    pixels[i+1] = g;
+                    pixels[i+2] = b;
+                }
+                buffer.updatePixels();
+            }
+            
             p.image(buffer, 0, 0, p.width, p.height);
             events.emit('render:frame-drawn');
             if (state.mediaType === 'image') needsRedraw = false;
-        } else {
-            isProcessing = true;
-            const imageData = buffer.drawingContext.getImageData(0, 0, pw, ph);
-            
-            ditherWorker.postMessage({
-                imageData,
-                config,
-                lumaLUT: lumaLUT.lut, // Pasamos el array de bytes, no el objeto completo
-                pw,
-                ph
-            }, [imageData.data.buffer]);
         }
     };
 }
