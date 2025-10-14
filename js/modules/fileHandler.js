@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Gestión de Archivos (File Handler)
+ * DitherLab v7 - Módulo de Gestión de Archivos (File Handler) (VERSIÓN CORREGIDA)
  * ============================================================================
  */
 import { events } from '../app/events.js';
@@ -8,7 +8,7 @@ import { updateState, getState, updateConfig } from '../app/state.js';
 import { showToast } from '../utils/helpers.js';
 
 let currentFileURL = null;
-let p5Instance = null; // Guardar referencia a la instancia de p5.js
+let p5Instance = null; // Guardar referencia a la instancia de p5.js para usarla en el evento
 
 function rgbToHsl(r, g, b) {
     r /= 255; g /= 255; b /= 255;
@@ -28,7 +28,6 @@ function rgbToHsl(r, g, b) {
 }
 
 async function generatePaletteFromMedia(media, colorCount, p) {
-    // Si no hay medio cargado, no hacer nada
     if (!media) {
         console.warn("generatePaletteFromMedia fue llamado sin un medio válido.");
         return;
@@ -73,7 +72,8 @@ async function generatePaletteFromMedia(media, colorCount, p) {
 
         if (pixels.length === 0) {
             showToast("No se pudieron leer los colores del medio.", 3000);
-            return ['#000000', '#FFFFFF'];
+            updateConfig({ colors: ['#000000', '#FFFFFF'] });
+            return;
         }
 
         const colorDist = (c1, c2) => Math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2 + (c1[2]-c2[2])**2);
@@ -125,7 +125,6 @@ async function generatePaletteFromMedia(media, colorCount, p) {
         
         centroids.sort((a, b) => rgbToHsl(a[0], a[1], a[2])[2] - rgbToHsl(b[0], b[1], b[2])[2]);
         
-        // Directamente actualizamos la configuración con la nueva paleta
         const newPalette = centroids.map(c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''));
         updateConfig({ colors: newPalette });
 
@@ -180,8 +179,7 @@ async function handleFile(file, p) {
             media: mediaElement,
             mediaType
         });
-        
-        // La paleta se genera después de cargar el medio
+
         await generatePaletteFromMedia(mediaElement, getState().config.colorCount, p);
         
         showToast(`${mediaType === 'video' ? 'Video' : 'Imagen'} cargado.`);
@@ -226,7 +224,7 @@ export function initializeFileHandler(p) {
     // ✅ CORRECCIÓN: Añadimos el listener para el nuevo evento de regeneración de paleta
     events.on('palette:regenerate-from-media', async () => {
         const { media, config } = getState();
-        if (media) {
+        if (media && p5Instance) {
             await generatePaletteFromMedia(media, config.colorCount, p5Instance);
         }
     });
