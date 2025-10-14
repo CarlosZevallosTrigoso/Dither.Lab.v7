@@ -1,6 +1,9 @@
 /**
  * ============================================================================
- * DitherLab v7 - Módulo de Exportación (VERSIÓN CORREGIDA Y ROBUSTA)
+ * DitherLab v7 - Módulo de Exportación (VERSIÓN COMPLETA Y ROBUSTA)
+ * ============================================================================
+ * - Gestiona todas las exportaciones: WebM, GIF, PNG, Secuencia PNG
+ * - Implementa verificación de frames y manejo de errores robusto
  * ============================================================================
  */
 import { events } from '../app/events.js';
@@ -62,7 +65,10 @@ function seekAndEnsureRender(media, time) {
 
 async function exportWithFrames(processFrame, onProgress, onFinish, options) {
     const { media, mediaType, timeline } = getState();
-    if (mediaType !== 'video') return showToast('Esta exportación solo funciona con videos.');
+    if (mediaType !== 'video') {
+        showToast('Esta exportación solo funciona con videos.');
+        return;
+    }
 
     const { useMarkers, fps, totalFrames, getDimensions } = options;
     const { width, height } = getDimensions();
@@ -75,7 +81,7 @@ async function exportWithFrames(processFrame, onProgress, onFinish, options) {
     const frameCount = totalFrames || Math.floor(duration * fps);
     
     showToast(`Iniciando exportación de ${frameCount} frames...`);
-    Object.values(elements).forEach(el => { if(el.tagName === 'BUTTON') el.disabled = true; });
+    Object.values(elements).forEach(el => { if(el && el.tagName === 'BUTTON') el.disabled = true; });
 
     const wasPlaying = getState().isPlaying;
     if (wasPlaying) events.emit('playback:toggle');
@@ -97,7 +103,7 @@ async function exportWithFrames(processFrame, onProgress, onFinish, options) {
     } finally {
         await seekAndEnsureRender(media, originalTime);
         if (wasPlaying) events.emit('playback:toggle');
-        Object.values(elements).forEach(el => { if(el.tagName === 'BUTTON') el.disabled = false; });
+        Object.values(elements).forEach(el => { if(el && el.tagName === 'BUTTON') el.disabled = false; });
     }
 }
 
@@ -145,9 +151,116 @@ async function exportGif() {
     exportWithFrames(processFrame, onProgress, () => gif.render(), options);
 }
 
+/**
+ * ✅ NUEVA FUNCIÓN: Exporta secuencia de frames como imágenes PNG individuales.
+ */
+async function exportSequence() {
+    const { media, mediaType, timeline, config } = getState();
+    
+    if (mediaType !== 'video') {
+        showToast('Esta exportación solo funciona con videos.');
+        return;
+    }
+
+    // Determinar rango de exportación
+    const useMarkers = true; // Siempre usar marcadores si existen
+    const startTime = timeline.markerInTime !== null ? timeline.markerInTime : 0;
+    let endTime = timeline.markerOutTime !== null ? timeline.markerOutTime : media.duration();
+    if (endTime <= startTime) endTime = media.duration();
+
+    const duration = endTime - startTime;
+    const fps = 30; // FPS para extraer frames
+    const frameCount = Math.floor(duration * fps);
+
+    if (frameCount > 300) {
+        const confirm = window.confirm(
+            `Esto generará ${frameCount} imágenes PNG. ¿Deseas continuar?\n\n` +
+            `Tip: Usa marcadores de entrada/salida para reducir el rango.`
+        );
+        if (!confirm) return;
+    }
+
+    showToast(`Preparando ${frameCount} frames para exportar...`);
+
+    const wasPlaying = getState().isPlaying;
+    if (wasPlaying) events.emit('playback:toggle');
+    const originalTime = media.time();
+
+    // Deshabilitar todos los botones durante la exportación
+    Object.values(elements).forEach(el => { 
+        if(el && el.tagName === 'BUTTON') el.disabled = true; 
+    });
+
+    try {
+        const zip = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
+        const JSZip = zip.default;
+        const archive = new JSZip();
+
+        const frameFolder = archive.folder(`ditherlab_${config.effect}_${Date.now()}`);
+
+        for (let i = 0; i < frameCount; i++) {
+            const time = startTime + (i / fps);
+            if (time > media.duration()) break;
+
+            // Seek y esperar render
+            await seekAndEnsureRender(media, time);
+
+            // Capturar frame
+            const canvasFrame = p5Instance.get();
+            const dataURL = canvasFrame.canvas.toDataURL('image/png');
+            const base64Data = dataURL.split(',')[1];
+
+            // Agregar al ZIP con nombre secuencial
+            const frameName = `frame_${String(i).padStart(5, '0')}.png`;
+            frameFolder.file(frameName, base64Data, { base64: true });
+
+            // Mostrar progreso
+            if (i % 10 === 0 || i === frameCount - 1) {
+                const progress = ((i + 1) / frameCount) * 100;
+                showToast(`Procesando: ${Math.round(progress)}%`, 500);
+            }
+        }
+
+        showToast('Comprimiendo archivo ZIP...', 2000);
+
+        // Generar ZIP
+        const zipBlob = await archive.generateAsync({ 
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+
+        // Descargar ZIP
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ditherlab_sequence_${config.effect}_${Date.now()}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showToast(`✅ Secuencia de ${frameCount} frames exportada correctamente.`, 3000);
+
+    } catch (error) {
+        console.error('Error durante la exportación de secuencia:', error);
+        showToast('❌ Error al exportar secuencia. Ver consola.', 4000);
+    } finally {
+        // Restaurar estado
+        await seekAndEnsureRender(media, originalTime);
+        if (wasPlaying) events.emit('playback:toggle');
+        
+        // Rehabilitar botones
+        Object.values(elements).forEach(el => { 
+            if(el && el.tagName === 'BUTTON') el.disabled = false; 
+        });
+    }
+}
+
 function startRecording() {
     const { media, mediaType, config, isPlaying, timeline } = getState();
-    if (mediaType !== 'video') return showToast('Solo se puede grabar con videos.');
+    if (mediaType !== 'video') {
+        showToast('Solo se puede grabar con videos.');
+        return;
+    }
     
     const qualitySelector = document.getElementById('webmQualitySelector');
     const selectedButton = qualitySelector.querySelector('.bg-cyan-600');
@@ -162,7 +275,7 @@ function startRecording() {
     const endTime = useMarkers && timeline.markerOutTime !== null && timeline.markerOutTime > startTime ? timeline.markerOutTime : media.duration();
     
     media.time(startTime);
-    stopRecordingAtTime = endTime; // Usamos una variable global del módulo
+    stopRecordingAtTime = endTime;
 
     let exportWidth = media.width, exportHeight = media.height;
     const maxDim = (quality === 'ultra') ? 1920 : 1080;
@@ -177,7 +290,10 @@ function startRecording() {
 
     try {
         const stream = p5Instance.canvas.captureStream(30);
-        recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: WEBM_BITRATES[quality] });
+        recorder = new MediaRecorder(stream, { 
+            mimeType: 'video/webm;codecs=vp8', 
+            videoBitsPerSecond: WEBM_BITRATES[quality] 
+        });
         chunks = [];
         recorder.ondataavailable = e => e.data.size > 0 && chunks.push(e.data);
         recorder.onstop = () => {
@@ -196,7 +312,7 @@ function startRecording() {
             p5Instance.resizeCanvas(originalCanvasWidth, originalCanvasHeight);
             updateState({ isRecording: false });
             events.emit('export:finished');
-            showToast('WebM exportado.');
+            showToast('WebM exportado correctamente.');
         };
         recorder.start();
         updateState({ isRecording: true });
@@ -210,7 +326,7 @@ function startRecording() {
 function stopRecording() {
     if (recorder && recorder.state === 'recording') {
         recorder.stop();
-        stopRecordingAtTime = -1; // Reseteamos la variable
+        stopRecordingAtTime = -1;
     }
 }
 
@@ -223,7 +339,8 @@ function checkRecordingTime() {
 }
 
 function downloadPNG() {
-    p5Instance.saveCanvas(`ditherlab_v7_${getState().config.effect}_${Date.now()}`, 'png');
+    const { config } = getState();
+    p5Instance.saveCanvas(`ditherlab_v7_${config.effect}_${Date.now()}`, 'png');
     showToast('Imagen PNG exportada.');
 }
 
@@ -231,41 +348,89 @@ export function initializeExporter(p5Inst) {
     p5Instance = p5Inst;
     queryElements();
 
-    elements.recBtn.addEventListener('click', startRecording);
-    elements.stopBtn.addEventListener('click', stopRecording);
-    elements.downloadImageBtn.addEventListener('click', downloadPNG);
-    elements.exportGifBtn.addEventListener('click', exportGif);
-    elements.exportSpriteBtn.addEventListener('click', () => showToast('Sprite Sheet no implementado en esta versión.'));
-    
-    ['gifWidthSlider', 'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle'].forEach(id => {
-        if(elements[id]) elements[id].addEventListener('input', updateGifDimensionsEstimate);
-    });
-    if (elements.gifWidthSlider) {
-        elements.gifWidthSlider.addEventListener('input', e => elements.gifWidthVal.textContent = e.target.value);
+    // Eventos principales
+    if (elements.recBtn) {
+        elements.recBtn.addEventListener('click', startRecording);
     }
+    
+    if (elements.stopBtn) {
+        elements.stopBtn.addEventListener('click', stopRecording);
+    }
+    
+    if (elements.downloadImageBtn) {
+        elements.downloadImageBtn.addEventListener('click', downloadPNG);
+    }
+    
+    if (elements.exportGifBtn) {
+        elements.exportGifBtn.addEventListener('click', exportGif);
+    }
+    
+    // ✅ NUEVO: Conectar botón de Secuencia PNG
+    if (elements.exportSequenceBtn) {
+        elements.exportSequenceBtn.addEventListener('click', exportSequence);
+        // Mostrar botón solo para videos
+        events.on('media:loaded', (payload) => {
+            if (elements.exportSequenceBtn) {
+                elements.exportSequenceBtn.classList.toggle('hidden', payload.mediaType !== 'video');
+            }
+        });
+    }
+    
+    // Sprite Sheet no implementado
+    if (elements.exportSpriteBtn) {
+        elements.exportSpriteBtn.addEventListener('click', () => {
+            showToast('Sprite Sheet no disponible en esta versión.', 3000);
+        });
+    }
+    
+    // Actualización de estimaciones
+    ['gifWidthSlider', 'gifFpsSlider', 'gifQualitySlider', 'gifUseMarkersToggle'].forEach(id => {
+        if(elements[id]) {
+            elements[id].addEventListener('input', updateGifDimensionsEstimate);
+            elements[id].addEventListener('change', updateGifDimensionsEstimate);
+        }
+    });
+    
+    if (elements.gifWidthSlider) {
+        elements.gifWidthSlider.addEventListener('input', e => {
+            if (elements.gifWidthVal) {
+                elements.gifWidthVal.textContent = e.target.value;
+            }
+        });
+    }
+    
+    // Selector de calidad WebM
     document.querySelectorAll('.webm-quality-btn').forEach(button => {
         button.addEventListener('click', () => {
-            document.querySelectorAll('.webm-quality-btn').forEach(btn => btn.classList.replace('bg-cyan-600', 'bg-slate-700'));
-            button.classList.replace('bg-slate-700', 'bg-cyan-600');
+            document.querySelectorAll('.webm-quality-btn').forEach(btn => {
+                btn.classList.remove('bg-cyan-600', 'text-white');
+                btn.classList.add('bg-slate-700');
+            });
+            button.classList.remove('bg-slate-700');
+            button.classList.add('bg-cyan-600', 'text-white');
         });
     });
 
-    events.on('render:frame-drawn', checkRecordingTime); // Hook de tiempo para WebM
+    // Eventos del sistema
+    events.on('render:frame-drawn', checkRecordingTime);
     events.on('export:start-recording', startRecording);
     events.on('export:stop-recording', stopRecording);
     events.on('export:png', downloadPNG);
     events.on('media:loaded', () => setTimeout(updateGifDimensionsEstimate, 100));
 
+    // Actualizar UI según estado
     events.on('state:updated', (state) => {
         const isVideo = state.mediaType === 'video';
         const isRecording = state.isRecording;
-        elements.recBtn.disabled = !isVideo || isRecording;
-        elements.stopBtn.classList.toggle('hidden', !isRecording);
-        elements.recIndicator.classList.toggle('hidden', !isRecording);
-        elements.status.textContent = isRecording ? 'Grabando...' : 'Listo';
-        elements.exportGifBtn.disabled = !isVideo || isRecording;
-        elements.exportSpriteBtn.disabled = !isVideo || isRecording;
+        
+        if (elements.recBtn) elements.recBtn.disabled = !isVideo || isRecording;
+        if (elements.stopBtn) elements.stopBtn.classList.toggle('hidden', !isRecording);
+        if (elements.recIndicator) elements.recIndicator.classList.toggle('hidden', !isRecording);
+        if (elements.status) elements.status.textContent = isRecording ? 'Grabando...' : 'Listo';
+        if (elements.exportGifBtn) elements.exportGifBtn.disabled = !isVideo || isRecording;
+        if (elements.exportSequenceBtn) elements.exportSequenceBtn.disabled = !isVideo || isRecording;
+        if (elements.exportSpriteBtn) elements.exportSpriteBtn.disabled = !isVideo || isRecording;
     });
 
-    console.log('Exporter Module (Robust) inicializado.');
+    console.log('Exporter Module (Complete) inicializado.');
 }
