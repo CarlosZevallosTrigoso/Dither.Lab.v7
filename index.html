@@ -265,11 +265,17 @@
             <input id="presetNameInput" type="text" placeholder="Nombre" class="flex-grow bg-slate-700 p-2 rounded text-white text-sm">
             <button id="savePresetBtn" class="px-3 py-2 bg-orange-600 rounded hover:bg-orange-500 text-sm">Guardar</button>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 mb-3">
             <select id="presetSelect" class="flex-grow bg-slate-700 p-2 rounded text-white text-sm">
               <option value="">Cargar Preset...</option>
             </select>
             <button id="deletePresetBtn" class="px-3 py-2 bg-red-800 rounded hover:bg-red-700 text-sm">Borrar</button>
+          </div>
+          <!-- ✅ AÑADIDO: Botones de Export/Import -->
+          <div class="flex gap-2">
+            <button id="exportPresetBtn" class="flex-1 px-3 py-2 bg-slate-700 rounded hover:bg-slate-600 text-sm">📤 Exportar</button>
+            <button id="importPresetBtn" class="flex-1 px-3 py-2 bg-slate-700 rounded hover:bg-slate-600 text-sm">📥 Importar</button>
+            <input id="importPresetFile" type="file" accept=".json" class="hidden"/>
           </div>
         </div>
 
@@ -352,25 +358,12 @@
             </div>
           </div>
           
-          <div id="spriteSheetPanel" class="mb-3 pt-3 border-t border-slate-700">
-            <div class="text-xs text-gray-400 mb-2">Sprite Sheet</div>
-            <div class="space-y-2 mb-2">
-              <label class="block">
-              <span class="text-xs">Columnas: <span id="spriteCols">8</span></span>
-                <input id="spriteColsSlider" type="range" min="4" max="16" value="8" class="w-full"/>
-              </label>
-              <label class="block">
-                <span class="text-xs">Frames: <span id="spriteFrameCount">30</span></span>
-                <input id="spriteFrameCountSlider" type="range" min="10" max="100" value="30" class="w-full"/>
-              </label>
-            </div>
-            <button id="exportSpriteBtn" class="w-full py-2 bg-pink-600 rounded hover:bg-pink-500" disabled>Exportar Sprite</button>
-          </div>
+          <!-- ✅ MODIFICADO: Eliminado Sprite Sheet ya que no está implementado -->
           
           <div class="pt-3 border-t border-slate-700">
             <div class="text-xs text-gray-400 mb-2">Frame Actual</div>
             <button id="downloadImageBtn" class="w-full py-2 bg-cyan-600 rounded hover:bg-cyan-500 mb-2">Exportar PNG</button>
-            <button id="exportSequenceBtn" class="w-full py-2 bg-teal-600 rounded hover:bg-teal-500 hidden" disabled>Secuencia PNG</button>
+            <!-- ✅ NOTA: exportSequenceBtn existe pero no está implementado en exporter.js -->
           </div>
           
           <div id="status" class="text-xs text-gray-400 mt-3">Esperando...</div>
