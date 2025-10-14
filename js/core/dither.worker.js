@@ -1,10 +1,11 @@
 /**
  * ============================================================================
- * DitherLab v7 - Web Worker para Dithering (VERSIÓN CORREGIDA Y AMPLIADA)
+ * DitherLab v7 - Web Worker para Dithering (VERSIÓN CORREGIDA Y COMPLETADA)
  * ============================================================================
  * - Contiene toda la lógica de procesamiento para los algoritmos de dithering.
  * - Incluye las implementaciones de Difusión de Error, Dithering Ordenado
  * (Bayer, Blue Noise) y Variable Error, adaptadas de la v6.
+ * - IMPLEMENTA el uso de los Controles Artísticos (gamma, ruido, etc.).
  * ============================================================================
  */
 
@@ -27,15 +28,12 @@ const BAYER_4x4_THRESHOLD = [
 ].flat().map(v => (v / 16.0) - 0.5);
 
 const BLUE_NOISE_8x8_THRESHOLD = new Float32Array([
-    0.53, 0.18, 0.71, 0.41, 0.94, 0.24, 0.82, 0.47,
-    0.12, 0.65, 0.29, 0.88, 0.06, 0.59, 0.35, 0.76,
-    0.76, 0.35, 0.94, 0.18, 0.71, 0.12, 0.88, 0.24,
-    0.24, 0.82, 0.47, 0.65, 0.29, 0.94, 0.41, 0.59,
-    0.88, 0.06, 0.71, 0.35, 0.82, 0.18, 0.65, 0.12,
-    0.41, 0.59, 0.12, 0.76, 0.24, 0.47, 0.94, 0.29,
-    0.65, 0.29, 0.88, 0.06, 0.59, 0.71, 0.35, 0.82,
-    0.18, 0.94, 0.24, 0.53, 0.12, 0.76, 0.47, 0.41
+    0.53, 0.18, 0.71, 0.41, 0.94, 0.24, 0.82, 0.47, 0.12, 0.65, 0.29, 0.88, 0.06, 0.59, 0.35, 0.76,
+    0.76, 0.35, 0.94, 0.18, 0.71, 0.12, 0.88, 0.24, 0.24, 0.82, 0.47, 0.65, 0.29, 0.94, 0.41, 0.59,
+    0.88, 0.06, 0.71, 0.35, 0.82, 0.18, 0.65, 0.12, 0.41, 0.59, 0.12, 0.76, 0.24, 0.47, 0.94, 0.29,
+    0.65, 0.29, 0.88, 0.06, 0.59, 0.71, 0.35, 0.82, 0.18, 0.94, 0.24, 0.53, 0.12, 0.76, 0.47, 0.41
 ]).map(v => v - 0.5);
+
 
 // --- FUNCIONES AUXILIARES ---
 
@@ -46,15 +44,15 @@ function findClosestColor(r, g, b, lumaLUT) {
     return [lumaLUT[pos], lumaLUT[pos + 1], lumaLUT[pos + 2]];
 }
 
+
 // --- LÓGICA DE ALGORITMOS ---
 
 function applyPosterize(pixels, lumaLUT) {
     for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
-        const [newR, newG, newB] = findClosestColor(r, g, b, lumaLUT);
-        pixels[i] = newR;
-        pixels[i + 1] = newG;
-        pixels[i + 2] = newB;
+        const [r, g, b] = findClosestColor(pixels[i], pixels[i + 1], pixels[i + 2], lumaLUT);
+        pixels[i] = r;
+        pixels[i + 1] = g;
+        pixels[i + 2] = b;
     }
 }
 
@@ -62,8 +60,8 @@ function applyErrorDiffusion(pixels, pw, ph, config, lumaLUT) {
     const kernel = KERNELS[config.effect];
     if (!kernel) return;
 
-    const strength = config.diffusionStrength;
-    const serpentine = config.serpentineScan;
+    const { diffusionStrength, serpentineScan, errorGamma, diffusionNoise } = config;
+    const gammaCorrection = v => Math.sign(v) * (Math.pow(Math.abs(v) / 255, errorGamma) * 255);
     let dir = 1;
 
     for (let y = 0; y < ph; y++) {
@@ -79,9 +77,19 @@ function applyErrorDiffusion(pixels, pw, ph, config, lumaLUT) {
             pixels[i+1] = newG;
             pixels[i+2] = newB;
 
-            const errR = (oldR - newR) * strength;
-            const errG = (oldG - newG) * strength;
-            const errB = (oldB - newB) * strength;
+            let errR = (oldR - newR) * diffusionStrength;
+            let errG = (oldG - newG) * diffusionStrength;
+            let errB = (oldB - newB) * diffusionStrength;
+            
+            if (errorGamma !== 1.0) {
+                errR = gammaCorrection(errR);
+                errG = gammaCorrection(errG);
+                errB = gammaCorrection(errB);
+            }
+            if (diffusionNoise > 0) {
+                const noise = (Math.random() - 0.5) * diffusionNoise;
+                errR += noise; errG += noise; errB += noise;
+            }
 
             for (const p of kernel.points) {
                 const nx = x + p.dx * dir;
@@ -95,12 +103,12 @@ function applyErrorDiffusion(pixels, pw, ph, config, lumaLUT) {
                 }
             }
         }
-        if (serpentine) dir *= -1;
+        if (serpentineScan) dir *= -1;
     }
 }
 
 function applyOrderedDither(pixels, pw, ph, config, lumaLUT, thresholdMatrix) {
-    const strength = config.patternStrength;
+    const { patternStrength, patternMix } = config;
     const matrixSize = Math.sqrt(thresholdMatrix.length);
 
     for (let y = 0; y < ph; y++) {
@@ -109,16 +117,15 @@ function applyOrderedDither(pixels, pw, ph, config, lumaLUT, thresholdMatrix) {
             let r = pixels[i], g = pixels[i+1], b = pixels[i+2];
 
             const threshold = thresholdMatrix[(y % matrixSize) * matrixSize + (x % matrixSize)];
-            const offset = threshold * 255 * strength;
+            const offset = threshold * 255 * patternStrength;
             
-            r += offset;
-            g += offset;
-            b += offset;
+            r += offset; g += offset; b += offset;
 
             const [newR, newG, newB] = findClosestColor(r, g, b, lumaLUT);
-            pixels[i] = newR;
-            pixels[i+1] = newG;
-            pixels[i+2] = newB;
+
+            pixels[i]   = newR * patternMix + pixels[i]   * (1 - patternMix);
+            pixels[i+1] = newG * patternMix + pixels[i+1] * (1 - patternMix);
+            pixels[i+2] = newB * patternMix + pixels[i+2] * (1 - patternMix);
         }
     }
 }
@@ -126,23 +133,22 @@ function applyOrderedDither(pixels, pw, ph, config, lumaLUT, thresholdMatrix) {
 function applyVariableError(pixels, pw, ph, config, lumaLUT) {
     const kernel = KERNELS['floyd-steinberg'];
     const gradients = new Float32Array(pw * ph);
+    const tempPixels = new Uint8ClampedArray(pixels);
 
-    // 1. Calcular gradientes para detectar bordes
     for (let y = 1; y < ph - 1; y++) {
         for (let x = 1; x < pw - 1; x++) {
             const i = (y * pw + x) * 4;
-            const gx = Math.abs(pixels[i + 4] - pixels[i - 4]);
-            const gy = Math.abs(pixels[i + (pw * 4)] - pixels[i - (pw * 4)]);
+            const gx = Math.abs(tempPixels[i + 4] - tempPixels[i - 4]);
+            const gy = Math.abs(tempPixels[i + (pw * 4)] - tempPixels[i - (pw * 4)]);
             gradients[y * pw + x] = Math.sqrt(gx * gx + gy * gy) / 255;
         }
     }
 
-    // 2. Aplicar difusión con fuerza adaptativa
     for (let y = 0; y < ph; y++) {
         for (let x = 0; x < pw; x++) {
             const i = (y * pw + x) * 4;
             const gradient = gradients[y * pw + x] || 0;
-            const adaptiveStrength = config.diffusionStrength * (1 - gradient * 0.75); // Reducir difusión en bordes
+            const adaptiveStrength = config.diffusionStrength * (1 - gradient * 0.75);
 
             const oldR = pixels[i], oldG = pixels[i+1], oldB = pixels[i+2];
             const [newR, newG, newB] = findClosestColor(oldR, oldG, oldB, lumaLUT);
@@ -169,13 +175,13 @@ function applyVariableError(pixels, pw, ph, config, lumaLUT) {
     }
 }
 
+
 // --- EVENT LISTENER DEL WORKER ---
 
 self.onmessage = (e) => {
     const { imageData, config, lumaLUT, pw, ph } = e.data;
     const pixels = imageData.data;
 
-    // Lógica principal de selección de algoritmo
     if (KERNELS[config.effect]) {
         applyErrorDiffusion(pixels, pw, ph, config, lumaLUT);
     } else if (config.effect === 'bayer') {
