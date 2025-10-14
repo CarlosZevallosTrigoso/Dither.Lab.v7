@@ -12,6 +12,7 @@ class MediaLoader {
     this.p5 = p;
     this.currentFileURL = null;
     this.currentMediaInstance = null;
+    eventBus.subscribe('palette:request-regeneration', () => this.regeneratePalette());
   }
 
   /**
@@ -31,7 +32,6 @@ class MediaLoader {
     }
 
     this.currentFileURL = URL.createObjectURL(file);
-    const mediaType = isVideo ? 'video' : 'image';
 
     eventBus.publish('ui:showToast', { message: 'Cargando medio...' });
 
@@ -59,8 +59,10 @@ class MediaLoader {
         },
         playback: { isPlaying: false }
       });
+      
+      eventBus.publish('canvas:resize');
+      this.generatePalette(img, 'image', store.getState().config);
 
-      this.generatePalette(img, 'image');
     }, () => {
       eventBus.publish('ui:showToast', { message: 'Error al cargar la imagen.' });
     });
@@ -71,41 +73,46 @@ class MediaLoader {
    * @param {string} url - La URL del objeto del video.
    */
   loadVideo(url) {
-    const video = this.p5.createVideo([url], () => {
-      video.volume(0);
-      video.hide();
-      this.currentMediaInstance = video;
+    const video = this.p5.createVideo([url]);
+    video.volume(0);
+    video.hide();
+    
+    video.elt.addEventListener('loadedmetadata', () => {
+        this.currentMediaInstance = video;
 
-      store.setState({
-        media: {
-          instance: video,
-          type: 'video',
-          isLoaded: true,
-          width: video.width,
-          height: video.height,
-          duration: video.duration(),
-        },
-        playback: { isPlaying: false }
-      });
-      
-      // Espera un momento para que el primer frame esté disponible
-      setTimeout(() => this.generatePalette(video, 'video'), 200);
+        store.setState({
+            media: {
+                instance: video,
+                type: 'video',
+                isLoaded: true,
+                width: video.width,
+                height: video.height,
+                duration: video.duration(),
+            },
+            playback: { isPlaying: false }
+        });
+
+        eventBus.publish('canvas:resize');
     });
+
+    video.elt.addEventListener('canplay', () => {
+        this.generatePalette(video, 'video', store.getState().config);
+    }, { once: true });
   }
 
   /**
    * Genera la paleta de colores para el medio cargado.
    * @param {p5.MediaElement | p5.Image} media - La instancia del medio.
    * @param {string} type - 'image' o 'video'.
+   * @param {object} config - El estado de la configuración actual.
    */
-  async generatePalette(media, type) {
+  async generatePalette(media, type, config) {
     eventBus.publish('ui:showToast', { message: 'Generando paleta de colores...' });
     
     if (type === 'video') media.pause();
 
     try {
-      const config = store.getState().config;
-      const newPalette = await paletteGenerator.generate(media, config.colorCount, this.p5);
+      const newPalette = await paletteGenerator.generate(media, config, this.p5);
       
       if (newPalette.length > 0) {
         store.setKey('config.colors', newPalette);
@@ -116,6 +123,16 @@ class MediaLoader {
       console.error("Error al generar la paleta:", error);
       eventBus.publish('ui:showToast', { message: 'Error al analizar los colores.' });
     }
+  }
+
+  /**
+   * Vuelve a generar la paleta cuando un control de la UI lo solicita.
+   */
+  regeneratePalette() {
+      const { media, config } = store.getState();
+      if (media.isLoaded && media.instance) {
+          this.generatePalette(media.instance, media.type, config);
+      }
   }
 
   /**
