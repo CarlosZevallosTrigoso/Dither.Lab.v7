@@ -23,7 +23,11 @@ export function deepMerge(target, source) {
   const output = { ...target };
   if (isObject(target) && isObject(source)) {
     Object.keys(source).forEach(key => {
-      if (isObject(source[key])) {
+      // Caso especial: no fusionar la propiedad 'instance', solo asignarla directamente.
+      // Esto previene la corrupción de objetos complejos como p5.Image o p5.MediaElement.
+      if (key === 'instance') {
+        output[key] = source[key];
+      } else if (isObject(source[key])) {
         if (!(key in target)) {
           Object.assign(output, { [key]: source[key] });
         } else {
@@ -38,15 +42,32 @@ export function deepMerge(target, source) {
 }
 
 /**
- * Crea una copia profunda de un objeto utilizando JSON.stringify y JSON.parse.
- * Es rápido pero no funciona con tipos de datos complejos como Fechas, Funciones, undefined, etc.
- * Para DitherLab, que solo maneja datos serializables en su estado, es suficiente.
+ * Crea una copia profunda de un objeto.
+ * Esta versión es más robusta que JSON.parse(JSON.stringify()) porque puede
+ * manejar propiedades especiales.
  * @param {object} obj - El objeto a clonar.
  * @returns {object} Una copia profunda del objeto.
  */
 export function deepClone(obj) {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-  return JSON.parse(JSON.stringify(obj));
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+
+    // Crea un nuevo objeto o array.
+    const newObj = Array.isArray(obj) ? [] : {};
+
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            // Caso especial: para la clave 'instance', copiamos la referencia, no clonamos.
+            // Esto es crucial para preservar los objetos de p5.js.
+            if (key === 'instance' && typeof obj[key] === 'object') {
+                newObj[key] = obj[key];
+            } else {
+                // Para todas las demás propiedades, se realiza un clonado recursivo.
+                newObj[key] = deepClone(obj[key]);
+            }
+        }
+    }
+
+    return newObj;
 }
