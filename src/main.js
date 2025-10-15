@@ -61,12 +61,17 @@ class App {
     // 1. Iniciar el gestor del canvas
     this.canvasManager = new CanvasManager('canvasContainer');
     this.canvasManager.init();
+    
+    // 2. Iniciar el controlador de la UI, que a su vez inicializa todos los paneles.
+    // Esto se hace ahora para asegurar que los elementos del DOM existen.
+    this.uiController = new UIController();
+    this.uiController.init();
 
-    // 2. Esperar a que p5.js esté listo
+    // 3. Esperar a que p5.js esté listo para inicializar los módulos dependientes de él.
     eventBus.subscribe('canvas:ready', (p5_instance) => {
-      console.log('Canvas listo. Inicializando módulos dependientes...');
+      console.log('Canvas listo. Inicializando módulos dependientes de p5...');
 
-      // 3. Inicializar todos los demás sistemas
+      // 4. Inicializar todos los demás sistemas
       this.mediaLoader = new MediaLoader(p5_instance);
       eventBus.subscribe('media:load-file', (file) => this.mediaLoader.loadFile(file));
 
@@ -75,10 +80,6 @@ class App {
       this.presetManager = new PresetManager();
       this.metricsCalculator = new MetricsCalculator();
       this.metricsCalculator.init(p5_instance);
-
-      // Iniciar el controlador de la UI, que a su vez inicializa todos los paneles
-      this.uiController = new UIController();
-      this.uiController.init();
 
       // Iniciar el registro de exportadores
       this.registerExporters();
