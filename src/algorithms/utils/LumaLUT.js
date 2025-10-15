@@ -1,8 +1,7 @@
 /**
  * @file LumaLUT.js
  * @description Crea y gestiona una Look-Up Table (LUT) para un mapeo
- * rápido de valores de luminancia a los colores de la paleta.
- * ESTA VERSIÓN HA SIDO RECONSTRUIDA PARA SER ROBUSTA.
+ * rápido de valores de luminancia a los colores de la paleta. (RECONSTRUIDO)
  */
 
 export class LumaLUT {
@@ -13,7 +12,7 @@ export class LumaLUT {
 
   /**
    * Construye o reconstruye la LUT.
-   * En lugar de asumir un orden, calcula el color más cercano para cada nivel de luma.
+   * Calcula el color más cercano para cada nivel de luma, en lugar de asumir un orden.
    * @param {p5.Color[]} p5colors - El array de colores de la paleta (instancias de p5.Color).
    * @param {p5} p - La instancia de p5.
    */
