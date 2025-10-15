@@ -95,29 +95,43 @@ class MediaLoader {
         eventBus.publish('canvas:resize');
     });
 
-    // 🔥 SOLUCIÓN ROBUSTA PARA GENERACIÓN DE PALETA EN VIDEO
-    video.elt.addEventListener('loadeddata', async () => {
+    // 🔥 SOLUCIÓN MÁS AGRESIVA: Esperar a 'canplaythrough' para asegurar que hay datos suficientes
+    video.elt.addEventListener('canplaythrough', async () => {
       const videoElement = video.elt;
 
+      console.log('MediaLoader: Video puede reproducirse completamente');
+
       try {
-        // 1. Validar que tenemos duración válida
+        // 1. Validar duración
         if (!videoElement.duration || videoElement.duration === 0 || !isFinite(videoElement.duration)) {
-          console.error('Video no tiene duración válida');
-          eventBus.publish('ui:showToast', { 
-            message: 'Advertencia: No se pudo obtener la duración del video.' 
-          });
+          console.error('MediaLoader: Video no tiene duración válida');
           return;
         }
 
-        // 2. Calcular posición segura para extraer frame (10% del video o máximo disponible)
+        // 2. Primero reproducir el video para asegurar renderizado inicial
+        console.log('MediaLoader: Reproduciendo video brevemente...');
+        try {
+          await videoElement.play();
+        } catch (playError) {
+          console.warn('MediaLoader: Play inicial bloqueado:', playError.message);
+        }
+
+        // 3. Esperar 200ms para que se renderice al menos un frame
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // 4. Pausar
+        videoElement.pause();
+        console.log('MediaLoader: Video pausado');
+
+        // 5. Buscar un frame significativo (30% del video en lugar de 10%)
         const targetTime = Math.min(
-          Math.max(videoElement.duration * 0.1, 0.1), 
-          videoElement.duration - 0.1
+          Math.max(videoElement.duration * 0.3, 0.5), 
+          videoElement.duration - 0.5
         );
         
         console.log(`MediaLoader: Buscando frame en ${targetTime.toFixed(2)}s de ${videoElement.duration.toFixed(2)}s`);
 
-        // 3. Esperar al seek con Promise y timeout de seguridad
+        // 6. Hacer seek con timeout
         await Promise.race([
           new Promise((resolve, reject) => {
             const onSeeked = () => {
@@ -128,51 +142,48 @@ class MediaLoader {
             const onError = (e) => {
               videoElement.removeEventListener('seeked', onSeeked);
               videoElement.removeEventListener('error', onError);
-              reject(new Error('Error al buscar frame: ' + e.message));
+              reject(new Error('Error en seek: ' + e.message));
             };
             
             videoElement.addEventListener('seeked', onSeeked, { once: true });
             videoElement.addEventListener('error', onError, { once: true });
-            
-            // Iniciar el seek
             videoElement.currentTime = targetTime;
           }),
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout al buscar frame')), 5000)
+            setTimeout(() => reject(new Error('Timeout en seek')), 5000)
           )
         ]);
 
-        console.log('MediaLoader: Frame encontrado, preparando renderizado...');
+        console.log('MediaLoader: Seek completado');
 
-        // 4. Reproducir brevemente para forzar renderizado del frame
+        // 7. Reproducir NUEVAMENTE para forzar el renderizado del nuevo frame
         try {
           await videoElement.play();
-        } catch (playError) {
-          console.warn('MediaLoader: Play automático bloqueado (normal en algunos navegadores)');
-          // Continuar de todos modos, el frame puede estar ya renderizado
+        } catch (e) {
+          console.warn('MediaLoader: Play post-seek bloqueado');
         }
         
-        // 5. Esperar un frame de animación para asegurar renderizado en canvas
+        // 8. Esperar 3 frames de animación para asegurar renderizado completo
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => requestAnimationFrame(resolve));
         await new Promise(resolve => requestAnimationFrame(resolve));
         
-        // 6. Pausar el video
+        // 9. Pausar de nuevo
         videoElement.pause();
         
-        // 7. Esperar otro frame para asegurar que la pausa se aplicó
+        // 10. Esperar un frame más
         await new Promise(resolve => requestAnimationFrame(resolve));
 
-        console.log('MediaLoader: Video pausado en frame correcto, generando paleta...');
+        console.log('MediaLoader: Frame estable, generando paleta...');
 
-        // 8. Generar la paleta con el frame ahora visible y renderizado
+        // 11. Generar paleta
         await this.generatePalette(video, 'video', store.getState().config);
 
       } catch (error) {
-        console.error('MediaLoader: Error al preparar video para generación de paleta:', error);
+        console.error('MediaLoader: Error al preparar video:', error);
         eventBus.publish('ui:showToast', { 
-          message: 'Advertencia: No se pudo generar la paleta automáticamente. Puedes regenerarla desde el panel de paleta.' 
+          message: 'No se pudo generar la paleta automáticamente. Puedes regenerarla manualmente.' 
         });
-        
-        // Generar una paleta por defecto como fallback
         store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
       }
     }, { once: true });
@@ -188,7 +199,6 @@ class MediaLoader {
     eventBus.publish('ui:showToast', { message: 'Generando paleta de colores...' });
     
     if (type === 'video') {
-      // Asegurar que el video esté pausado durante el análisis
       media.pause();
     }
 
