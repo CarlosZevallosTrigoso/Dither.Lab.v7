@@ -2,8 +2,7 @@
  * @file LumaLUT.js
  * @description Crea y gestiona una Look-Up Table (LUT) para mapeo rápido
  * de valores de luminancia a colores de la paleta.
- * 
- * ⚡ VERSIÓN MEJORADA - REESCRITURA COMPLETA:
+ * * ⚡ VERSIÓN MEJORADA - REESCRITURA COMPLETA:
  * Implementa un sistema de bins de luminancia tipo histograma que distribuye
  * los colores de forma más natural, evitando banding y respetando la densidad
  * de colores en diferentes rangos de brillo.
@@ -28,8 +27,13 @@ export class LumaLUT {
       weights: []      // Peso/frecuencia de cada color (para futuro)
     }));
     
-    // Modo de operación: 'histogram' (nuevo) o 'nearest' (legacy)
-    this.mode = 'histogram';
+    // ==================================================================
+    // === CORRECCIÓN APLICADA AQUÍ                                   ===
+    // === La lógica 'histogram' es conceptualmente incorrecta para   ===
+    // === dithering, causando posterización. Forzamos el modo        ===
+    // === 'nearest' que implementa el algoritmo correcto.            ===
+    // ==================================================================
+    this.mode = 'nearest';
   }
 
   /**
