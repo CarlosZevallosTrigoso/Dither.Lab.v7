@@ -7,6 +7,7 @@
 import { imageAdjustments } from './ImageAdjustments.js';
 import { curveProcessor } from './CurveProcessor.js';
 import { algorithmRegistry } from '../algorithms/AlgorithmRegistry.js';
+import { eventBus } from '../core/EventBus.js'; // ✅ IMPORTAR AL INICIO
 // Importar correctamente todas las instancias de algoritmos
 import FloydSteinberg from '../algorithms/ErrorDiffusion/FloydSteinberg.js';
 import Atkinson from '../algorithms/ErrorDiffusion/Atkinson.js';
@@ -24,6 +25,7 @@ import Posterize from '../algorithms/Advanced/Posterize.js';
 class ImageProcessor {
   constructor(utils) {
     this.utils = utils; // { colorCache, lumaLUT, bayerLUT, blueNoiseLUT }
+    this.lastStatsPublish = 0; // ✅ INICIALIZAR AQUÍ
     this.registerAlgorithms();
   }
 
@@ -49,22 +51,17 @@ class ImageProcessor {
 
   /**
    * Añade ruido sutil a los píxeles para romper gradientes y mejorar el dithering.
-   * 🔥 MEJORADO: Ruido más suave con redondeo para evitar acumulación de errores.
    * @param {Uint8ClampedArray} pixels - Array de píxeles a modificar
    */
   addNoise(pixels) {
-      // Reducir intensidad del ruido de 4 a 3 para resultados más sutiles
       const noiseIntensity = 3;
       
       for (let i = 0; i < pixels.length; i += 4) {
-          // Generar ruido en rango [-1.5, 1.5]
           const noise = (Math.random() - 0.5) * noiseIntensity;
           
-          // Aplicar ruido y redondear para evitar acumulación de errores de punto flotante
           pixels[i]     = Math.round(Math.max(0, Math.min(255, pixels[i] + noise)));
           pixels[i + 1] = Math.round(Math.max(0, Math.min(255, pixels[i + 1] + noise)));
           pixels[i + 2] = Math.round(Math.max(0, Math.min(255, pixels[i + 2] + noise)));
-          // Alpha channel (i+3) no se modifica
       }
   }
 
@@ -104,7 +101,6 @@ class ImageProcessor {
             algorithm.process(buffer.pixels, buffer.width, buffer.height, config, this.utils);
         } catch (error) {
             console.error(`ImageProcessor: Error al ejecutar algoritmo '${config.effect}':`, error);
-            // No updatePixels aquí, dejar que el buffer mantenga su estado anterior
         }
     } else if (config.effect !== 'none') {
         console.warn(`ImageProcessor: Algoritmo '${config.effect}' no encontrado.`);
@@ -114,13 +110,10 @@ class ImageProcessor {
     
     // 5. Medir tiempo de procesamiento y publicar estadísticas
     const processingTime = performance.now() - startTime;
-    
-    // Calcular FPS basándose en el tiempo de procesamiento
     const fps = processingTime > 0 ? 1000 / processingTime : 0;
     
-    // Publicar estadísticas (throttled por el CanvasManager)
-    if (this.lastStatsPublish === undefined || Date.now() - this.lastStatsPublish > 500) {
-        const eventBus = require('../core/EventBus.js').eventBus;
+    // Publicar estadísticas (throttled)
+    if (Date.now() - this.lastStatsPublish > 500) {
         eventBus.publish('stats:update', {
             fps: fps,
             frameTime: processingTime
@@ -133,3 +126,12 @@ class ImageProcessor {
 }
 
 export { ImageProcessor };
+```
+
+---
+
+## 🔥 Ahora sobre el problema de la paleta negra
+
+Veo en los logs:
+```
+PaletteGenerator.js:35 PaletteGenerator: Frame parece estar completamente negro/vacío
