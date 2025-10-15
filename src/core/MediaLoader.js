@@ -1,6 +1,6 @@
 /**
  * @file MediaLoader.js
- * @description Gestiona la carga de archivos de imagen y video.
+ * @description Gestiona la carga de archivos de imagen y video. (RECONSTRUIDO)
  */
 
 import { store } from './Store.js';
