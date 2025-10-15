@@ -95,20 +95,29 @@ class MediaLoader {
         eventBus.publish('canvas:resize');
     });
 
+    // SOLUCIÓN INFALIBLE
     video.elt.addEventListener('canplay', () => {
-        const seekTime = Math.min(1, video.duration() * 0.1); // Ir al 10% o al segundo 1
-        
-        const onSeeked = () => {
-            video.elt.removeEventListener('seeked', onSeeked);
-            // CORRECCIÓN DEFINITIVA: Esperar un breve momento para que el navegador
-            // renderice el fotograma buscado antes de analizarlo.
-            setTimeout(() => {
-                this.generatePalette(video, 'video', store.getState().config);
-            }, 100); // 100ms de espera
-        };
-        
-        video.elt.addEventListener('seeked', onSeeked, { once: true });
-        video.time(seekTime);
+      const videoElement = video.elt;
+
+      const onFrameReady = () => {
+        // 3. El fotograma está listo. Pausamos inmediatamente.
+        videoElement.pause();
+        // 4. Ahora, con total seguridad, generamos la paleta.
+        this.generatePalette(video, 'video', store.getState().config);
+      };
+
+      // 1. Nos suscribimos al próximo fotograma de video RENDERIZADO.
+      // Usamos un try-catch para navegadores más antiguos, con un fallback.
+      try {
+        videoElement.requestVideoFrameCallback(onFrameReady);
+      } catch (e) {
+        // Fallback para navegadores que no soportan requestVideoFrameCallback
+        setTimeout(onFrameReady, 150);
+      }
+
+      // 2. Movemos el video al 10% y lo reproducimos para forzar el renderizado del fotograma.
+      videoElement.currentTime = video.duration() * 0.1;
+      videoElement.play();
 
     }, { once: true });
   }
