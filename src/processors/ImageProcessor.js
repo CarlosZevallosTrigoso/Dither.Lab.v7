@@ -1,7 +1,6 @@
 /**
  * @file ImageProcessor.js
- * @description Orquesta el pipeline de procesamiento de imágenes.
- * Aplica ajustes, curvas y el algoritmo de dithering seleccionado.
+ * @description Orquesta el pipeline de procesamiento de imágenes. (RESTAURADO)
  */
 
 import { imageAdjustments } from './ImageAdjustments.js';
