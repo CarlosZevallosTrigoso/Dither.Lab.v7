@@ -60,7 +60,8 @@ class MediaLoader {
       });
       
       eventBus.publish('canvas:resize');
-      this.generatePalette(img, 'image', store.getState().config);
+      await this.generatePalette(img, 'image', store.getState().config);
+      eventBus.publish('ui:showToast', { message: 'Imagen cargada con éxito.' });
 
     }, () => {
       eventBus.publish('ui:showToast', { message: 'Error al cargar la imagen.' });
@@ -68,13 +69,17 @@ class MediaLoader {
   }
 
   /**
-   * Carga un video.
+   * Carga un video de forma robusta, asegurando que el primer fotograma esté listo.
    * @param {string} url - La URL del objeto del video.
    */
   loadVideo(url) {
-    const video = this.p5.createVideo([url], async () => {
-      this.currentMediaInstance = video;
+    const video = this.p5.createVideo([url]);
+    video.volume(0);
+    video.hide();
+    this.currentMediaInstance = video;
 
+    // 1. Esperar a que los metadatos (dimensiones, duración) estén listos.
+    video.elt.addEventListener('loadedmetadata', () => {
       store.setState({
         media: {
           instance: video,
@@ -87,18 +92,23 @@ class MediaLoader {
         playback: { isPlaying: false }
       });
 
-      video.volume(0);
-      video.hide();
-      
       eventBus.publish('canvas:resize');
-      
-      // Espera un momento corto pero predecible para que el primer fotograma se renderice
-      await new Promise(resolve => setTimeout(resolve, 250));
 
-      await this.generatePalette(video, 'video', store.getState().config);
+      // 2. Escuchar el evento 'seeked' UNA SOLA VEZ.
+      video.elt.addEventListener('seeked', async () => {
+        // 4. (CRUCIAL) Dar al navegador un ciclo de renderizado para pintar el fotograma.
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // 5. Ahora es seguro generar la paleta.
+        await this.generatePalette(video, 'video', store.getState().config);
+        eventBus.publish('ui:showToast', { message: 'Video cargado con éxito.' });
 
-      eventBus.publish('ui:showToast', { message: 'Video cargado con éxito.' });
-    });
+      }, { once: true }); // El { once: true } es clave para evitar loops.
+
+      // 3. Mover el video a un punto muy temprano (no t=0) para forzar la decodificación.
+      video.time(0.1);
+
+    }, { once: true });
   }
 
   /**
@@ -110,12 +120,8 @@ class MediaLoader {
   async generatePalette(media, type, config) {
     eventBus.publish('ui:showToast', { message: 'Generando paleta de colores...' });
     
-    // Asegurarse de que el video esté pausado y en un punto conocido
     if (type === 'video') {
       media.pause();
-      media.time(0);
-      // Darle un respiro extra al navegador para procesar el frame en t=0
-      await new Promise(r => setTimeout(r, 200));
     }
 
     try {
@@ -138,10 +144,19 @@ class MediaLoader {
   /**
    * Vuelve a generar la paleta cuando un control de la UI lo solicita.
    */
-  regeneratePalette() {
+  async regeneratePalette() {
       const { media, config } = store.getState();
       if (media.isLoaded && media.instance) {
-          this.generatePalette(media.instance, media.type, config);
+          if (media.type === 'video') {
+            // Reutilizamos la lógica robusta de seek y espera
+            media.instance.elt.addEventListener('seeked', async () => {
+              await new Promise(resolve => setTimeout(resolve, 150));
+              await this.generatePalette(media.instance, media.type, config);
+            }, { once: true });
+            media.instance.time(0.1);
+          } else {
+            await this.generatePalette(media.instance, media.type, config);
+          }
       }
   }
 
