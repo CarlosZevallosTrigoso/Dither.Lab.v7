@@ -147,13 +147,13 @@ class MediaLoader {
   async regeneratePalette() {
       const { media, config } = store.getState();
       if (media.isLoaded && media.instance) {
+          // Reutilizamos la misma lógica robusta para asegurar consistencia
           if (media.type === 'video') {
-            // Reutilizamos la lógica robusta de seek y espera
             media.instance.elt.addEventListener('seeked', async () => {
               await new Promise(resolve => setTimeout(resolve, 150));
               await this.generatePalette(media.instance, media.type, config);
             }, { once: true });
-            media.instance.time(0.1);
+            media.instance.time(media.instance.time()); // Vuelve a buscar el frame actual
           } else {
             await this.generatePalette(media.instance, media.type, config);
           }
