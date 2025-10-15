@@ -95,35 +95,86 @@ class MediaLoader {
         eventBus.publish('canvas:resize');
     });
 
-    // SOLUCIÓN DEFINITIVA Y ROBUSTA
-    video.elt.addEventListener('canplay', async () => {
+    // 🔥 SOLUCIÓN ROBUSTA PARA GENERACIÓN DE PALETA EN VIDEO
+    video.elt.addEventListener('loadeddata', async () => {
       const videoElement = video.elt;
 
-      // Esperar a que el video se mueva al fotograma deseado
-      await new Promise(resolve => {
-        const onSeeked = () => {
-          videoElement.removeEventListener('seeked', onSeeked);
-          resolve();
-        }
-        videoElement.addEventListener('seeked', onSeeked, { once: true });
-        videoElement.currentTime = video.duration() * 0.1; // Ir al 10%
-      });
-
-      // Intentar reproducir y esperar a que el navegador lo confirme
       try {
-        await videoElement.play();
-      } catch (err) {
-        // Si hay un error (ej: el usuario interactuó), no continuamos.
-        console.error("Fallo al reproducir video para captura de paleta:", err);
-        return;
+        // 1. Validar que tenemos duración válida
+        if (!videoElement.duration || videoElement.duration === 0 || !isFinite(videoElement.duration)) {
+          console.error('Video no tiene duración válida');
+          eventBus.publish('ui:showToast', { 
+            message: 'Advertencia: No se pudo obtener la duración del video.' 
+          });
+          return;
+        }
+
+        // 2. Calcular posición segura para extraer frame (10% del video o máximo disponible)
+        const targetTime = Math.min(
+          Math.max(videoElement.duration * 0.1, 0.1), 
+          videoElement.duration - 0.1
+        );
+        
+        console.log(`MediaLoader: Buscando frame en ${targetTime.toFixed(2)}s de ${videoElement.duration.toFixed(2)}s`);
+
+        // 3. Esperar al seek con Promise y timeout de seguridad
+        await Promise.race([
+          new Promise((resolve, reject) => {
+            const onSeeked = () => {
+              videoElement.removeEventListener('seeked', onSeeked);
+              videoElement.removeEventListener('error', onError);
+              resolve();
+            };
+            const onError = (e) => {
+              videoElement.removeEventListener('seeked', onSeeked);
+              videoElement.removeEventListener('error', onError);
+              reject(new Error('Error al buscar frame: ' + e.message));
+            };
+            
+            videoElement.addEventListener('seeked', onSeeked, { once: true });
+            videoElement.addEventListener('error', onError, { once: true });
+            
+            // Iniciar el seek
+            videoElement.currentTime = targetTime;
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout al buscar frame')), 5000)
+          )
+        ]);
+
+        console.log('MediaLoader: Frame encontrado, preparando renderizado...');
+
+        // 4. Reproducir brevemente para forzar renderizado del frame
+        try {
+          await videoElement.play();
+        } catch (playError) {
+          console.warn('MediaLoader: Play automático bloqueado (normal en algunos navegadores)');
+          // Continuar de todos modos, el frame puede estar ya renderizado
+        }
+        
+        // 5. Esperar un frame de animación para asegurar renderizado en canvas
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        
+        // 6. Pausar el video
+        videoElement.pause();
+        
+        // 7. Esperar otro frame para asegurar que la pausa se aplicó
+        await new Promise(resolve => requestAnimationFrame(resolve));
+
+        console.log('MediaLoader: Video pausado en frame correcto, generando paleta...');
+
+        // 8. Generar la paleta con el frame ahora visible y renderizado
+        await this.generatePalette(video, 'video', store.getState().config);
+
+      } catch (error) {
+        console.error('MediaLoader: Error al preparar video para generación de paleta:', error);
+        eventBus.publish('ui:showToast', { 
+          message: 'Advertencia: No se pudo generar la paleta automáticamente. Puedes regenerarla desde el panel de paleta.' 
+        });
+        
+        // Generar una paleta por defecto como fallback
+        store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
       }
-      
-      // En este punto, la reproducción ha comenzado con éxito. Ahora pausamos.
-      videoElement.pause();
-
-      // Con el fotograma correcto visible y pausado, generamos la paleta.
-      this.generatePalette(video, 'video', store.getState().config);
-
     }, { once: true });
   }
 
@@ -136,19 +187,27 @@ class MediaLoader {
   async generatePalette(media, type, config) {
     eventBus.publish('ui:showToast', { message: 'Generando paleta de colores...' });
     
-    if (type === 'video') media.pause();
+    if (type === 'video') {
+      // Asegurar que el video esté pausado durante el análisis
+      media.pause();
+    }
 
     try {
       const newPalette = await paletteGenerator.generate(media, config, this.p5);
       
       if (newPalette.length > 0) {
+        console.log('MediaLoader: Paleta generada exitosamente:', newPalette);
         store.setKey('config.colors', newPalette);
+        eventBus.publish('ui:showToast', { message: 'Medio cargado con éxito.' });
+      } else {
+        console.warn('MediaLoader: Paleta vacía, usando valores por defecto');
+        store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
+        eventBus.publish('ui:showToast', { message: 'Medio cargado. Usando paleta por defecto.' });
       }
-      
-      eventBus.publish('ui:showToast', { message: 'Medio cargado con éxito.' });
     } catch (error) {
-      console.error("Error al generar la paleta:", error);
-      eventBus.publish('ui:showToast', { message: 'Error al analizar los colores.' });
+      console.error("MediaLoader: Error al generar la paleta:", error);
+      eventBus.publish('ui:showToast', { message: 'Error al analizar los colores. Usando paleta por defecto.' });
+      store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
     }
   }
 
