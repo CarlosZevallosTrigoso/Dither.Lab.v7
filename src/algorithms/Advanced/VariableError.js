@@ -9,12 +9,12 @@ class VariableError extends BaseAlgorithm {
 
   process(pixels, width, height, config, utils) {
     // ==================================================================
-    // === INICIO DE LA SECCIÓN MODIFICADA                          ===
+    // === INICIO DE LA RECONSTRUCCIÓN BASADA EN LA LÓGICA DE V6     ===
     // ==================================================================
     const { diffusionStrength } = config;
 
-    // 1. Calcular gradientes para detectar bordes (se mantiene, es la clave de este algoritmo)
-    // Se realiza sobre la imagen original antes de cualquier modificación.
+    // 1. Calcular gradientes para detectar bordes (lógica original y correcta de este algoritmo).
+    // Esto se mantiene, ya que es la característica que lo hace "variable".
     const gradients = new Float32Array(width * height);
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -29,7 +29,7 @@ class VariableError extends BaseAlgorithm {
       }
     }
 
-    // 2. Aplicar difusión de error con fuerza adaptativa usando la lógica RGB correcta
+    // 2. Aplicar difusión de error con la lógica RGB correcta de la v6.
     const paletteRGB = config.colors.map(hex => {
         const r = parseInt(hex.slice(1, 3), 16);
         const g = parseInt(hex.slice(3, 5), 16);
@@ -67,9 +67,9 @@ class VariableError extends BaseAlgorithm {
       for (let x = 0; x < width; x++) {
         const i = y * width + x;
         
-        // La fuerza de difusión se adapta según el gradiente del borde
+        // La fuerza de difusión se adapta según el gradiente del borde.
         const gradient = gradients[i] || 0;
-        const adaptiveStrength = diffusionStrength * (1 - gradient * 0.75); // Menos difusión en los bordes
+        const adaptiveStrength = diffusionStrength * (1 - gradient * 0.75);
 
         const oldR = tempPixelsR[i];
         const oldG = tempPixelsG[i];
@@ -82,6 +82,7 @@ class VariableError extends BaseAlgorithm {
         pixels[finalIndex + 1] = newG;
         pixels[finalIndex + 2] = newB;
 
+        // Calcular el error para cada canal con la fuerza adaptativa.
         const errorR = (oldR - newR) * adaptiveStrength;
         const errorG = (oldG - newG) * adaptiveStrength;
         const errorB = (oldB - newB) * adaptiveStrength;
@@ -101,9 +102,8 @@ class VariableError extends BaseAlgorithm {
       }
     }
     return pixels;
-    
     // ==================================================================
-    // === FIN DE LA SECCIÓN MODIFICADA                             ===
+    // === FIN DE LA RECONSTRUCCIÓN                                 ===
     // ==================================================================
   }
 }
