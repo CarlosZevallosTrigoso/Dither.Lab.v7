@@ -32,7 +32,6 @@ class MediaLoader {
     }
 
     this.currentFileURL = URL.createObjectURL(file);
-
     eventBus.publish('ui:showToast', { message: 'Cargando medio...' });
 
     if (isVideo) {
@@ -73,120 +72,33 @@ class MediaLoader {
    * @param {string} url - La URL del objeto del video.
    */
   loadVideo(url) {
-    const video = this.p5.createVideo([url]);
-    video.volume(0);
-    video.hide();
-    
-    video.elt.addEventListener('loadedmetadata', () => {
-        this.currentMediaInstance = video;
+    const video = this.p5.createVideo([url], async () => {
+      this.currentMediaInstance = video;
 
-        store.setState({
-            media: {
-                instance: video,
-                type: 'video',
-                isLoaded: true,
-                width: video.width,
-                height: video.height,
-                duration: video.duration(),
-            },
-            playback: { isPlaying: false }
-        });
+      store.setState({
+        media: {
+          instance: video,
+          type: 'video',
+          isLoaded: true,
+          width: video.width,
+          height: video.height,
+          duration: video.duration(),
+        },
+        playback: { isPlaying: false }
+      });
 
-        eventBus.publish('canvas:resize');
+      video.volume(0);
+      video.hide();
+      
+      eventBus.publish('canvas:resize');
+      
+      // Espera un momento corto pero predecible para que el primer fotograma se renderice
+      await new Promise(resolve => setTimeout(resolve, 250));
+
+      await this.generatePalette(video, 'video', store.getState().config);
+
+      eventBus.publish('ui:showToast', { message: 'Video cargado con éxito.' });
     });
-
-    // 🔥 SOLUCIÓN MÁS AGRESIVA: Esperar a 'canplaythrough' para asegurar que hay datos suficientes
-    video.elt.addEventListener('canplaythrough', async () => {
-      const videoElement = video.elt;
-
-      console.log('MediaLoader: Video puede reproducirse completamente');
-
-      try {
-        // 1. Validar duración
-        if (!videoElement.duration || videoElement.duration === 0 || !isFinite(videoElement.duration)) {
-          console.error('MediaLoader: Video no tiene duración válida');
-          return;
-        }
-
-        // 2. Primero reproducir el video para asegurar renderizado inicial
-        console.log('MediaLoader: Reproduciendo video brevemente...');
-        try {
-          await videoElement.play();
-        } catch (playError) {
-          console.warn('MediaLoader: Play inicial bloqueado:', playError.message);
-        }
-
-        // 3. Esperar 200ms para que se renderice al menos un frame
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // 4. Pausar
-        videoElement.pause();
-        console.log('MediaLoader: Video pausado');
-
-        // 5. Buscar un frame significativo (30% del video en lugar de 10%)
-        const targetTime = Math.min(
-          Math.max(videoElement.duration * 0.3, 0.5), 
-          videoElement.duration - 0.5
-        );
-        
-        console.log(`MediaLoader: Buscando frame en ${targetTime.toFixed(2)}s de ${videoElement.duration.toFixed(2)}s`);
-
-        // 6. Hacer seek con timeout
-        await Promise.race([
-          new Promise((resolve, reject) => {
-            const onSeeked = () => {
-              videoElement.removeEventListener('seeked', onSeeked);
-              videoElement.removeEventListener('error', onError);
-              resolve();
-            };
-            const onError = (e) => {
-              videoElement.removeEventListener('seeked', onSeeked);
-              videoElement.removeEventListener('error', onError);
-              reject(new Error('Error en seek: ' + e.message));
-            };
-            
-            videoElement.addEventListener('seeked', onSeeked, { once: true });
-            videoElement.addEventListener('error', onError, { once: true });
-            videoElement.currentTime = targetTime;
-          }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout en seek')), 5000)
-          )
-        ]);
-
-        console.log('MediaLoader: Seek completado');
-
-        // 7. Reproducir NUEVAMENTE para forzar el renderizado del nuevo frame
-        try {
-          await videoElement.play();
-        } catch (e) {
-          console.warn('MediaLoader: Play post-seek bloqueado');
-        }
-        
-        // 8. Esperar 3 frames de animación para asegurar renderizado completo
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        
-        // 9. Pausar de nuevo
-        videoElement.pause();
-        
-        // 10. Esperar un frame más
-        await new Promise(resolve => requestAnimationFrame(resolve));
-
-        console.log('MediaLoader: Frame estable, generando paleta...');
-
-        // 11. Generar paleta
-        await this.generatePalette(video, 'video', store.getState().config);
-
-      } catch (error) {
-        console.error('MediaLoader: Error al preparar video:', error);
-        eventBus.publish('ui:showToast', { 
-          message: 'No se pudo generar la paleta automáticamente. Puedes regenerarla manualmente.' 
-        });
-        store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
-      }
-    }, { once: true });
   }
 
   /**
@@ -198,8 +110,12 @@ class MediaLoader {
   async generatePalette(media, type, config) {
     eventBus.publish('ui:showToast', { message: 'Generando paleta de colores...' });
     
+    // Asegurarse de que el video esté pausado y en un punto conocido
     if (type === 'video') {
       media.pause();
+      media.time(0);
+      // Darle un respiro extra al navegador para procesar el frame en t=0
+      await new Promise(r => setTimeout(r, 200));
     }
 
     try {
@@ -208,11 +124,9 @@ class MediaLoader {
       if (newPalette.length > 0) {
         console.log('MediaLoader: Paleta generada exitosamente:', newPalette);
         store.setKey('config.colors', newPalette);
-        eventBus.publish('ui:showToast', { message: 'Medio cargado con éxito.' });
       } else {
         console.warn('MediaLoader: Paleta vacía, usando valores por defecto');
         store.setKey('config.colors', ['#000000', '#555555', '#aaaaaa', '#ffffff']);
-        eventBus.publish('ui:showToast', { message: 'Medio cargado. Usando paleta por defecto.' });
       }
     } catch (error) {
       console.error("MediaLoader: Error al generar la paleta:", error);
