@@ -71,8 +71,23 @@ class ImageProcessor {
     var algorithm = algorithmRegistry.get(config.effect);
     if (algorithm) {
         if (!config.useOriginalColor) {
-            var p5colors = this.utils.colorCache.getColors(config.colors);
-            this.utils.lumaLUT.build(p5colors, buffer);
+            const p5colors = this.utils.colorCache.getColors(config.colors);
+
+            // ================== INICIO DE LA CORRECCIÓN ==================
+            // La LumaLUT asume que la paleta está ordenada por luminancia.
+            // Cuando un usuario edita un color, el orden se rompe.
+            // Para solucionarlo, creamos una copia de la paleta y la ordenamos
+            // por luminancia solo para construir la LUT, sin afectar la UI.
+            
+            const getLuminance = (c) => {
+              const p5 = this.utils.colorCache.p;
+              return p5.red(c) * 0.299 + p5.green(c) * 0.587 + p5.blue(c) * 0.114;
+            };
+
+            const sortedP5Colors = [...p5colors].sort((a, b) => getLuminance(a) - getLuminance(b));
+            
+            this.utils.lumaLUT.build(sortedP5Colors, buffer);
+            // =================== FIN DE LA CORRECCIÓN ====================
         }
         
         try {
