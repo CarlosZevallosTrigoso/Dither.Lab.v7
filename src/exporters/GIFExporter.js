@@ -38,7 +38,7 @@ class GIFExporter extends BaseExporter {
         quality: quality,
         width: canvasManager.p5.width,
         height: canvasManager.p5.height,
-        workerScript: 'js/gif.worker.js', // Asumimos que el worker está en la raíz
+        workerScript: 'src/workers/gif.worker.js', // CORREGIDO: Ruta del worker ajustada
       });
 
       gif.on('finished', (blob) => {
