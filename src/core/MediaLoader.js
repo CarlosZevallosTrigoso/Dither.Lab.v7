@@ -95,29 +95,34 @@ class MediaLoader {
         eventBus.publish('canvas:resize');
     });
 
-    // SOLUCIÓN INFALIBLE
-    video.elt.addEventListener('canplay', () => {
+    // SOLUCIÓN DEFINITIVA Y ROBUSTA
+    video.elt.addEventListener('canplay', async () => {
       const videoElement = video.elt;
 
-      const onFrameReady = () => {
-        // 3. El fotograma está listo. Pausamos inmediatamente.
-        videoElement.pause();
-        // 4. Ahora, con total seguridad, generamos la paleta.
-        this.generatePalette(video, 'video', store.getState().config);
-      };
+      // Esperar a que el video se mueva al fotograma deseado
+      await new Promise(resolve => {
+        const onSeeked = () => {
+          videoElement.removeEventListener('seeked', onSeeked);
+          resolve();
+        }
+        videoElement.addEventListener('seeked', onSeeked, { once: true });
+        videoElement.currentTime = video.duration() * 0.1; // Ir al 10%
+      });
 
-      // 1. Nos suscribimos al próximo fotograma de video RENDERIZADO.
-      // Usamos un try-catch para navegadores más antiguos, con un fallback.
+      // Intentar reproducir y esperar a que el navegador lo confirme
       try {
-        videoElement.requestVideoFrameCallback(onFrameReady);
-      } catch (e) {
-        // Fallback para navegadores que no soportan requestVideoFrameCallback
-        setTimeout(onFrameReady, 150);
+        await videoElement.play();
+      } catch (err) {
+        // Si hay un error (ej: el usuario interactuó), no continuamos.
+        console.error("Fallo al reproducir video para captura de paleta:", err);
+        return;
       }
+      
+      // En este punto, la reproducción ha comenzado con éxito. Ahora pausamos.
+      videoElement.pause();
 
-      // 2. Movemos el video al 10% y lo reproducimos para forzar el renderizado del fotograma.
-      videoElement.currentTime = video.duration() * 0.1;
-      videoElement.play();
+      // Con el fotograma correcto visible y pausado, generamos la paleta.
+      this.generatePalette(video, 'video', store.getState().config);
 
     }, { once: true });
   }
