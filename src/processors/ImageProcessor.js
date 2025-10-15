@@ -19,12 +19,22 @@ import BlueNoise from '../algorithms/OrderedDithering/BlueNoise.js';
 import VariableError from '../algorithms/Advanced/VariableError.js';
 import Posterize from '../algorithms/Advanced/Posterize.js';
 
+// ==================================================================
+// === PASO 2.1: IMPORTAR EL NUEVO MÓDULO "PALETA DE COLORES II"  ===
+// ==================================================================
+import { PaletteProcessorV2 } from './PaletteProcessorV2.js';
+
 
 class ImageProcessor {
   constructor(utils) {
     this.utils = utils;
     this.lastStatsPublish = 0;
     this.registerAlgorithms();
+
+    // ==================================================================
+    // === PASO 2.2: CREAR UNA INSTANCIA DEL NUEVO PROCESADOR         ===
+    // ==================================================================
+    this.paletteProcessorV2 = new PaletteProcessorV2(utils);
   }
 
   registerAlgorithms() {
@@ -67,22 +77,39 @@ class ImageProcessor {
     imageAdjustments.apply(buffer.pixels, config);
     curveProcessor.apply(buffer.pixels, config.curves);
     
-    var algorithm = algorithmRegistry.get(config.effect);
-    if (algorithm) {
-        if (!config.useOriginalColor) {
-            // Ya no es necesario ordenar la paleta aquí, la LumaLUT ahora es robusta.
-            var p5colors = this.utils.colorCache.getColors(config.colors);
-            this.utils.lumaLUT.build(p5colors, buffer);
-        }
+    // ==================================================================
+    // === PASO 2.3: LÓGICA DE DECISIÓN PARA USAR EL NUEVO MOTOR      ===
+    // ==================================================================
+    // Usamos el nuevo procesador V2 si el modo "Paleta de Colores II" está activado
+    // Y si no estamos usando el modo "Aplicar a Color Original" (que ya funciona bien).
+    if (config.usePaletteV2 && !config.useOriginalColor) {
         
-        try {
-            algorithm.process(buffer.pixels, buffer.width, buffer.height, config, this.utils);
-        } catch (error) {
-            console.error('ImageProcessor: Error al ejecutar algoritmo ' + config.effect + ':', error);
+        console.log("Usando PaletteProcessorV2 (lógica de v6)");
+        this.paletteProcessorV2.process(buffer.pixels, buffer.width, buffer.height, config);
+
+    } else {
+        // --- LÓGICA ANTIGUA (SE MANTIENE PARA COMPARACIÓN) ---
+        var algorithm = algorithmRegistry.get(config.effect);
+        if (algorithm) {
+            if (!config.useOriginalColor) {
+                // La LumaLUT ahora es robusta, pero la lógica de difusión de error no.
+                var p5colors = this.utils.colorCache.getColors(config.colors);
+                this.utils.lumaLUT.build(p5colors, buffer);
+            }
+            
+            try {
+                // Aquí se llama a la lógica de procesamiento original de la v7.
+                algorithm.process(buffer.pixels, buffer.width, buffer.height, config, this.utils);
+            } catch (error) {
+                console.error('ImageProcessor: Error al ejecutar algoritmo ' + config.effect + ':', error);
+            }
+        } else if (config.effect !== 'none') {
+            console.warn('ImageProcessor: Algoritmo ' + config.effect + ' no encontrado.');
         }
-    } else if (config.effect !== 'none') {
-        console.warn('ImageProcessor: Algoritmo ' + config.effect + ' no encontrado.');
     }
+    // ==================================================================
+    // === FIN DE LA MODIFICACIÓN                                     ===
+    // ==================================================================
 
     buffer.updatePixels();
     
