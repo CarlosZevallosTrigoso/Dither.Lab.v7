@@ -19,17 +19,46 @@ class PaletteGenerator {
         return this.generateGrayscalePalette(k);
     }
     
-    // (NUEVO) Aumentar el tamaño del canvas para un muestreo de color más preciso.
+    // Aumentar el tamaño del canvas para un muestreo de color más preciso
     const tempCanvas = p.createGraphics(200, 200);
     tempCanvas.pixelDensity(1);
 
     tempCanvas.image(media, 0, 0, tempCanvas.width, tempCanvas.height);
     tempCanvas.loadPixels();
     const pixels = this.getRGBPixels(tempCanvas.pixels);
+    
+    // 🔥 VALIDACIÓN CRÍTICA: Verificar que no sean todos píxeles negros
+    // Esto ocurre cuando el video no se ha renderizado correctamente
+    const hasColor = pixels.some(pixel => pixel[0] > 10 || pixel[1] > 10 || pixel[2] > 10);
+    
+    if (!hasColor) {
+      console.warn('PaletteGenerator: Frame parece estar completamente negro/vacío');
+      console.warn('PaletteGenerator: Esto puede indicar que el video no se renderizó correctamente');
+      tempCanvas.remove();
+      
+      // Retornar una paleta de escala de grises como fallback
+      console.log('PaletteGenerator: Usando paleta de escala de grises como fallback');
+      return this.generateGrayscalePalette(k);
+    }
+    
+    // 🔥 VALIDACIÓN ADICIONAL: Verificar variedad de colores
+    const uniqueColors = new Set(pixels.map(p => `${p[0]},${p[1]},${p[2]}`));
+    
+    if (uniqueColors.size < 5) {
+      console.warn(`PaletteGenerator: Poca variedad de colores detectada (${uniqueColors.size} colores únicos)`);
+      console.warn('PaletteGenerator: El frame puede no ser representativo del video');
+    } else {
+      console.log(`PaletteGenerator: Analizando ${pixels.length} píxeles con ${uniqueColors.size} colores únicos`);
+    }
+    
     tempCanvas.remove();
 
-    if (pixels.length === 0) return [];
+    if (pixels.length === 0) {
+      console.error('PaletteGenerator: No se pudieron extraer píxeles');
+      return this.generateGrayscalePalette(k);
+    }
 
+    // Ejecutar K-Means++
     let centroids = this.initializeCentroids(pixels, k);
 
     for (let iter = 0; iter < 15; iter++) {
@@ -37,12 +66,16 @@ class PaletteGenerator {
       const newCentroids = this.calculateNewCentroids(pixels, assignments, k, centroids);
       
       if (this.haveCentroidsConverged(centroids, newCentroids)) {
+        console.log(`PaletteGenerator: K-Means convergió en ${iter + 1} iteraciones`);
         break;
       }
       centroids = newCentroids;
     }
 
-    return this.formatCentroids(centroids);
+    const palette = this.formatCentroids(centroids);
+    console.log('PaletteGenerator: Paleta final generada:', palette);
+    
+    return palette;
   }
 
   /**
@@ -58,6 +91,7 @@ class PaletteGenerator {
           const hex = value.toString(16).padStart(2, '0');
           palette.push(`#${hex}${hex}${hex}`);
       }
+      console.log('PaletteGenerator: Paleta de escala de grises generada:', palette);
       return palette;
   }
 
@@ -75,8 +109,12 @@ class PaletteGenerator {
 
   initializeCentroids(pixels, k) {
     const centroids = [];
-    centroids.push(pixels[Math.floor(Math.random() * pixels.length)]);
+    
+    // Elegir el primer centroide al azar
+    const firstIndex = Math.floor(Math.random() * pixels.length);
+    centroids.push([...pixels[firstIndex]]);
 
+    // K-Means++: elegir los siguientes centroides basándose en la distancia
     while (centroids.length < k) {
       const distancesSq = pixels.map(pixel => {
         let minDistanceSq = Infinity;
@@ -87,16 +125,33 @@ class PaletteGenerator {
       });
 
       const sumDistancesSq = distancesSq.reduce((a, b) => a + b, 0);
+      
+      // Evitar división por cero
+      if (sumDistancesSq === 0) {
+        console.warn('PaletteGenerator: Suma de distancias es cero, eligiendo centroide aleatorio');
+        const randomIndex = Math.floor(Math.random() * pixels.length);
+        centroids.push([...pixels[randomIndex]]);
+        continue;
+      }
+      
       let rand = Math.random() * sumDistancesSq;
       
       for (let i = 0; i < pixels.length; i++) {
         rand -= distancesSq[i];
         if (rand <= 0) {
-          centroids.push(pixels[i]);
+          centroids.push([...pixels[i]]);
           break;
         }
       }
+      
+      // Protección contra bucle infinito
+      if (centroids.length === centroids.length - 1) {
+        console.warn('PaletteGenerator: No se pudo agregar centroide, agregando aleatorio');
+        const randomIndex = Math.floor(Math.random() * pixels.length);
+        centroids.push([...pixels[randomIndex]]);
+      }
     }
+    
     return centroids;
   }
 
@@ -131,7 +186,11 @@ class PaletteGenerator {
 
     return newCentroids.map((centroid, i) =>
       counts[i] > 0
-        ? [Math.round(centroid[0] / counts[i]), Math.round(centroid[1] / counts[i]), Math.round(centroid[2] / counts[i])]
+        ? [
+            Math.round(centroid[0] / counts[i]), 
+            Math.round(centroid[1] / counts[i]), 
+            Math.round(centroid[2] / counts[i])
+          ]
         : oldCentroids[i]
     );
   }
@@ -147,8 +206,13 @@ class PaletteGenerator {
   }
 
   formatCentroids(centroids) {
-    const toHex = c => '#' + c.map(v => v.toString(16).padStart(2, '0')).join('');
+    const toHex = c => '#' + c.map(v => {
+      // Asegurar que los valores estén en rango válido
+      const clamped = Math.max(0, Math.min(255, Math.round(v)));
+      return clamped.toString(16).padStart(2, '0');
+    }).join('');
     
+    // Ordenar por luminancia (de oscuro a claro)
     return centroids
       .sort((a, b) => 
         (a[0] * 0.299 + a[1] * 0.587 + a[2] * 0.114) - 
