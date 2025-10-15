@@ -96,16 +96,18 @@ class MediaLoader {
     });
 
     video.elt.addEventListener('canplay', () => {
-        // CORREGIDO: En lugar de generar la paleta inmediatamente,
-        // primero nos aseguramos de buscar un fotograma válido.
         const seekTime = Math.min(1, video.duration() * 0.1); // Ir al 10% o al segundo 1
         
         const onSeeked = () => {
-            video.elt.removeEventListener('seeked', onSeeked); // Limpiar el listener
-            this.generatePalette(video, 'video', store.getState().config);
+            video.elt.removeEventListener('seeked', onSeeked);
+            // CORRECCIÓN DEFINITIVA: Esperar un breve momento para que el navegador
+            // renderice el fotograma buscado antes de analizarlo.
+            setTimeout(() => {
+                this.generatePalette(video, 'video', store.getState().config);
+            }, 100); // 100ms de espera
         };
         
-        video.elt.addEventListener('seeked', onSeeked);
+        video.elt.addEventListener('seeked', onSeeked, { once: true });
         video.time(seekTime);
 
     }, { once: true });
