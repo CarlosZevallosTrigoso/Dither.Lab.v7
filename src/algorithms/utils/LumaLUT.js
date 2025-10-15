@@ -2,6 +2,7 @@
  * @file LumaLUT.js
  * @description Crea y gestiona una Look-Up Table (LUT) para un mapeo
  * rápido de valores de luminancia a los colores de la paleta.
+ * ESTA VERSIÓN HA SIDO RECONSTRUIDA PARA SER ROBUSTA.
  */
 
 export class LumaLUT {
@@ -11,7 +12,8 @@ export class LumaLUT {
   }
 
   /**
-   * Construye o reconstruye la LUT si la paleta ha cambiado.
+   * Construye o reconstruye la LUT.
+   * En lugar de asumir un orden, calcula el color más cercano para cada nivel de luma.
    * @param {p5.Color[]} p5colors - El array de colores de la paleta (instancias de p5.Color).
    * @param {p5} p - La instancia de p5.
    */
@@ -21,17 +23,31 @@ export class LumaLUT {
       return; // La LUT ya está actualizada
     }
 
-    const count = p5colors.length;
-    if (count === 0) return;
+    if (p5colors.length === 0) return;
+
+    // Pre-calcular la luminancia de cada color en la paleta
+    const paletteLumas = p5colors.map(c => 
+        p.red(c) * 0.299 + p.green(c) * 0.587 + p.blue(c) * 0.114
+    );
 
     for (let i = 0; i < 256; i++) {
-      // Mapea el valor de luma (0-255) al índice más cercano en la paleta
-      const index = Math.min(Math.floor((i / 255) * count), count - 1);
-      const color = p5colors[index];
+      // Para cada nivel de luma (i), encontrar el color más cercano en la paleta
+      let bestMatchIndex = 0;
+      let minDistance = Infinity;
+
+      for (let j = 0; j < paletteLumas.length; j++) {
+        const distance = Math.abs(i - paletteLumas[j]);
+        if (distance < minDistance) {
+          minDistance = distance;
+          bestMatchIndex = j;
+        }
+      }
+
+      const bestColor = p5colors[bestMatchIndex];
       const idx = i * 3;
-      this.lut[idx] = p.red(color);
-      this.lut[idx + 1] = p.green(color);
-      this.lut[idx + 2] = p.blue(color);
+      this.lut[idx] = p.red(bestColor);
+      this.lut[idx + 1] = p.green(bestColor);
+      this.lut[idx + 2] = p.blue(bestColor);
     }
 
     this.cachedPaletteSignature = paletteSignature;
