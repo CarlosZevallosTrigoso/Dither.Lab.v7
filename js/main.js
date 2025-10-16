@@ -1,129 +1,133 @@
 // ============================================================================
-// EVENT BUS - Sistema de comunicación desacoplado
+// MAIN ENTRY POINT - v7 Architecture
 // ============================================================================
-// Permite que los módulos se comuniquen sin conocerse directamente
-// Ejemplo: MediaManager emite 'media:loaded' y varios componentes escuchan
+// Inicializa los módulos v7 de forma coordinada
 
-class EventBus {
-  constructor() {
-    // Mapa de eventos -> array de callbacks
-    this.listeners = new Map();
-    
-    // Para debugging (opcional)
-    this.debug = false;
+(function() {
+  'use strict';
+  
+  console.log('🚀 Inicializando DitherLab v7...');
+  
+  // Verificar que las dependencias estén cargadas
+  if (typeof EventBus === 'undefined') {
+    console.error('❌ EventBus no está cargado');
+    return;
   }
-
-  /**
-   * Registrar un listener para un evento
-   * @param {string} event - Nombre del evento (ej: 'media:loaded')
-   * @param {function} callback - Función a ejecutar cuando ocurra el evento
-   * @returns {function} - Función para desuscribirse
-   */
-  on(event, callback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, []);
-    }
-    
-    this.listeners.get(event).push(callback);
-    
-    if (this.debug) {
-      console.log(`[EventBus] Listener registrado: ${event}`);
-    }
-    
-    // Retornar función para desuscribirse fácilmente
-    return () => this.off(event, callback);
+  
+  if (typeof State === 'undefined') {
+    console.error('❌ State no está cargado');
+    return;
   }
-
-  /**
-   * Emitir un evento
-   * @param {string} event - Nombre del evento
-   * @param {*} data - Datos a pasar a los listeners
-   */
-  emit(event, data) {
-    const callbacks = this.listeners.get(event);
-    
-    if (!callbacks || callbacks.length === 0) {
-      if (this.debug) {
-        console.log(`[EventBus] Evento emitido sin listeners: ${event}`);
-      }
-      return;
-    }
-    
-    if (this.debug) {
-      console.log(`[EventBus] Emitiendo: ${event}`, data);
-    }
-    
-    // Ejecutar todos los callbacks
-    callbacks.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error(`[EventBus] Error en listener de "${event}":`, error);
-      }
-    });
+  
+  // ============================================================================
+  // INICIALIZACIÓN DE CORE
+  // ============================================================================
+  
+  // Crear instancia de EventBus (ya existe como singleton)
+  const eventBus = window.eventBus;
+  
+  // Crear instancia de State
+  const state = new State(eventBus);
+  window.state = state; // Hacer global para acceso desde legacy code
+  
+  console.log('  ✓ Core inicializado (EventBus + State)');
+  
+  // ============================================================================
+  // INICIALIZACIÓN DE MANAGERS
+  // ============================================================================
+  
+  // MediaManager (si está disponible)
+  if (typeof MediaManager !== 'undefined') {
+    const mediaManager = new MediaManager(state, eventBus);
+    window.mediaManager = mediaManager;
+    console.log('  ✓ MediaManager inicializado');
+  } else {
+    console.warn('  ⚠️ MediaManager no disponible');
   }
-
-  /**
-   * Desuscribirse de un evento
-   * @param {string} event - Nombre del evento
-   * @param {function} callback - Callback a remover
-   */
-  off(event, callback) {
-    const callbacks = this.listeners.get(event);
-    
-    if (!callbacks) return;
-    
-    const index = callbacks.indexOf(callback);
-    if (index > -1) {
-      callbacks.splice(index, 1);
-      
-      if (this.debug) {
-        console.log(`[EventBus] Listener removido: ${event}`);
-      }
-    }
-    
-    // Limpiar el array si está vacío
-    if (callbacks.length === 0) {
-      this.listeners.delete(event);
-    }
+  
+  // ExportManager (si está disponible)
+  if (typeof ExportManager !== 'undefined') {
+    const exportManager = new ExportManager(state, eventBus);
+    window.exportManager = exportManager;
+    console.log('  ✓ ExportManager inicializado');
+  } else {
+    console.warn('  ⚠️ ExportManager no disponible');
   }
-
-  /**
-   * Remover todos los listeners de un evento
-   * @param {string} event - Nombre del evento
-   */
-  clear(event) {
-    if (event) {
-      this.listeners.delete(event);
+  
+  // UIController (si está disponible)
+  if (typeof UIController !== 'undefined') {
+    const uiController = new UIController(state, eventBus);
+    window.uiController = uiController;
+    
+    // Inicializar UI cuando el DOM esté listo
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        uiController.init();
+      });
     } else {
-      this.listeners.clear();
+      uiController.init();
     }
+    
+    console.log('  ✓ UIController inicializado');
+  } else {
+    console.warn('  ⚠️ UIController no disponible');
   }
-
-  /**
-   * Obtener número de listeners para un evento (útil para debugging)
-   * @param {string} event - Nombre del evento
-   * @returns {number}
-   */
-  listenerCount(event) {
-    const callbacks = this.listeners.get(event);
-    return callbacks ? callbacks.length : 0;
+  
+  // AlgorithmRegistry (si está disponible)
+  if (typeof AlgorithmRegistry !== 'undefined') {
+    const algorithmRegistry = new AlgorithmRegistry();
+    window.algorithmRegistry = algorithmRegistry;
+    console.log('  ✓ AlgorithmRegistry inicializado');
+    
+    // TODO: Registrar algoritmos aquí cuando estén convertidos a clases
+    // algorithmRegistry.register('floyd-steinberg', FloydSteinbergAlgorithm);
+  } else {
+    console.warn('  ⚠️ AlgorithmRegistry no disponible');
   }
-
-  /**
-   * Activar/desactivar modo debug
-   * @param {boolean} enabled
-   */
-  setDebug(enabled) {
-    this.debug = enabled;
-  }
-}
-
-// Exportar instancia singleton
-const eventBus = new EventBus();
-
-// Hacer disponible globalmente
-if (typeof window !== 'undefined') {
-  window.EventBus = EventBus;
-  window.eventBus = eventBus;
-}
+  
+  // ============================================================================
+  // DEBUGGING HELPERS
+  // ============================================================================
+  
+  // Exponer helpers globales para debugging en consola
+  window.DitherLab = {
+    version: '7.0',
+    state,
+    eventBus,
+    mediaManager: window.mediaManager,
+    exportManager: window.exportManager,
+    uiController: window.uiController,
+    algorithmRegistry: window.algorithmRegistry,
+    
+    // Métodos útiles
+    printState() {
+      state.print();
+    },
+    
+    printEvents() {
+      console.log('📡 Eventos registrados:');
+      for (const [event, listeners] of eventBus.listeners.entries()) {
+        console.log(`  • ${event}: ${listeners.length} listeners`);
+      }
+    },
+    
+    getStats() {
+      return {
+        stateSize: JSON.stringify(state.data).length,
+        eventListeners: Array.from(eventBus.listeners.entries()).map(
+          ([event, listeners]) => ({ event, count: listeners.length })
+        ),
+        mediaLoaded: !!state.get('media.file'),
+        mediaType: state.get('media.type'),
+        currentEffect: state.get('config.effect')
+      };
+    }
+  };
+  
+  console.log('✅ DitherLab v7 inicializado correctamente');
+  console.log('💡 Usa window.DitherLab para debugging en consola');
+  
+  // Emitir evento de inicialización completa
+  eventBus.emit('app:initialized');
+  
+})();
