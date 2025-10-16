@@ -102,9 +102,12 @@ class UIManager {
     ids.forEach(id => this.elements[id] = $(id));
   }
   
-  // OPTIMIZACIÓN FASE 2: Memoización DOM - solo recrear cuando cambia el número de colores
+  // ===================== INICIO DE LA CORRECCIÓN =====================
+  // Esta función ha sido refactorizada para usar la API del gestor de estado v7
   updateColorPickers(appState, colorCache, lumaLUT, p, forceGradient = false) {
-    const cfg = appState.config;
+    const cfg = appState.get('config');
+    if (!cfg) return; // Guarda de seguridad por si el estado no está listo
+
     const previousColors = [...cfg.colors];
     const newColors = [];
     const colorCountChanged = cfg.colorCount !== this.lastColorCount;
@@ -125,17 +128,18 @@ class UIManager {
       newColors.push(...previousColors);
     }
 
-    appState.updateConfig({ colors: newColors.slice(0, cfg.colorCount) });
+    appState.set('config.colors', newColors.slice(0, cfg.colorCount));
     
-    // OPTIMIZACIÓN FASE 2: Solo recrear DOM si cambió el número de colores
+    // Volver a obtener la configuración por si cambió `colors`
+    const updatedCfg = appState.get('config');
+    
     const container = this.elements.colorPickerContainer;
     const currentInputs = container.querySelectorAll('input[type="color"]');
     
-    if (colorCountChanged || currentInputs.length !== cfg.colorCount) {
-      // Recrear todo el DOM
+    if (colorCountChanged || currentInputs.length !== updatedCfg.colorCount) {
       container.innerHTML = "";
       
-      cfg.colors.forEach((hexColor, i) => {
+      updatedCfg.colors.forEach((hexColor, i) => {
         const label = document.createElement("label");
         label.className = "block";
         label.innerHTML = `
@@ -147,35 +151,35 @@ class UIManager {
         
         const colorInput = label.querySelector("input");
         colorInput.addEventListener("input", e => {
-          if (!cfg.isMonochrome) {
-            const colors = [...cfg.colors];
+          const currentConfig = appState.get('config');
+          if (!currentConfig.isMonochrome) {
+            const colors = [...currentConfig.colors];
             colors[i] = e.target.value;
-            appState.updateConfig({ colors });
+            appState.set('config.colors', colors);
             const p5colors = colorCache.getColors(colors);
             lumaLUT.build(p5colors, p);
             
-            // OPTIMIZACIÓN FASE 1: Trigger redraw
             if (triggerRedraw) triggerRedraw();
           }
         });
         container.appendChild(label);
       });
       
-      this.lastColorCount = cfg.colorCount;
+      this.lastColorCount = updatedCfg.colorCount;
     } else {
-      // Solo actualizar valores existentes
       currentInputs.forEach((input, i) => {
-        if (input.value.toLowerCase() !== cfg.colors[i].toLowerCase()) {
-          input.value = cfg.colors[i];
+        if (input.value.toLowerCase() !== updatedCfg.colors[i].toLowerCase()) {
+          input.value = updatedCfg.colors[i];
         }
       });
     }
     
-    const p5colors = colorCache.getColors(cfg.colors);
+    const p5colors = colorCache.getColors(updatedCfg.colors);
     lumaLUT.build(p5colors, p);
     
-    this.togglePaletteControls(cfg.useOriginalColor);
+    this.togglePaletteControls(updatedCfg.useOriginalColor);
   }
+  // ====================== FIN DE LA CORRECCIÓN =======================
   
   togglePaletteControls(isDisabled) {
     this.elements.monochromeToggle.disabled = isDisabled;
