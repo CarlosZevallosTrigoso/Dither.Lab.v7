@@ -7,7 +7,7 @@ import { eventBus } from './event-bus.js';
 
 // Estado inicial por defecto de la aplicación
 const initialState = {
-  media: null,
+  media: null, // Ahora es null por defecto, se asignará al cargar
   mediaType: null, // 'video' o 'image'
   isPlaying: false,
   isRecording: false,
@@ -44,8 +44,8 @@ const initialState = {
   }
 };
 
-// Clonamos el estado inicial para tener una copia mutable
-let appState = JSON.parse(JSON.stringify(initialState));
+// Usamos structuredClone para crear una copia inicial profunda y segura.
+let appState = structuredClone(initialState);
 
 // Objeto para manejar las mutaciones del estado de forma controlada
 export const state = {
@@ -54,7 +54,9 @@ export const state = {
    * @returns {object} Una copia profunda del estado actual.
    */
   get() {
-    return JSON.parse(JSON.stringify(appState));
+    // FIX: Reemplazamos JSON.stringify por structuredClone.
+    // Esto permite clonar objetos complejos como los de p5.js sin errores.
+    return structuredClone(appState);
   },
 
   /**
@@ -64,14 +66,17 @@ export const state = {
   mutate(changes) {
     // Fusión profunda para actualizar el estado
     Object.keys(changes).forEach(key => {
-      if (typeof changes[key] === 'object' && changes[key] !== null && !Array.isArray(changes[key])) {
+      // El objeto 'media' se asigna directamente, no se fusiona.
+      if (key === 'media') {
+        appState.media = changes.media;
+      } else if (typeof changes[key] === 'object' && changes[key] !== null && !Array.isArray(changes[key])) {
         appState[key] = { ...appState[key], ...changes[key] };
       } else {
         appState[key] = changes[key];
       }
     });
     
-    // Notifica que el estado ha cambiado
+    // Notifica que el estado ha cambiado, pasando una copia segura.
     eventBus.publish('state:changed', this.get());
   },
 
@@ -79,7 +84,11 @@ export const state = {
    * Resetea el estado a su valor inicial.
    */
   reset() {
-    appState = JSON.parse(JSON.stringify(initialState));
+    // Conservamos el objeto 'media' si existe, para no tener que recargarlo.
+    const currentMedia = appState.media;
+    appState = structuredClone(initialState);
+    appState.media = currentMedia; // Restauramos la media actual
+
     eventBus.publish('state:changed', this.get());
   }
 };
