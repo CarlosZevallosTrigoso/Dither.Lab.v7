@@ -29,49 +29,6 @@ class CircularBuffer {
   }
 }
 
-// Estado de la aplicación
-class AppState {
-  constructor() {
-    this.media = null;
-    this.mediaType = null;
-    this.isPlaying = false;
-    this.isRecording = false;
-    this.playbackSpeed = 1;
-    
-    this.config = {
-      effect: 'floyd-steinberg',
-      isMonochrome: false,
-      useOriginalColor: false,
-      colorCount: 4,
-      colors: [],
-      ditherScale: 2,
-      serpentineScan: false,
-      diffusionStrength: 1,
-      patternStrength: 0.5,
-      brightness: 0,
-      contrast: 1.0,
-      saturation: 1.0,
-      curvesLUTs: null
-    };
-    
-    this.timeline = {
-      markerInTime: null,
-      markerOutTime: null,
-      loopSection: false
-    };
-    
-    this.metrics = { psnr: 0, ssim: 0, compression: 0, paletteSize: 0, processTime: 0 };
-    this.listeners = [];
-  }
-  
-  update(changes) { Object.assign(this, changes); this.notify(); }
-  updateConfig(changes) { Object.assign(this.config, changes); this.notify(); }
-  updateTimeline(changes) { Object.assign(this.timeline, changes); this.notify(); }
-  updateMetrics(changes) { Object.assign(this.metrics, changes); }
-  subscribe(callback) { this.listeners.push(callback); }
-  notify() { this.listeners.forEach(fn => fn(this)); }
-}
-
 // Sketch p5.js
 document.addEventListener('DOMContentLoaded', () => {
   const sketch = p => {
@@ -81,7 +38,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // OPTIMIZACIÓN FASE 1: Flag para controlar redibujado
     let needsRedraw = true;
     
-    const appState = new AppState();
+    // ✅ USAR STATE V7
+    const appState = window.state;
+    
     const bufferPool = new BufferPool();
     const colorCache = new ColorCache(p);
     const lumaLUT = new LumaLUT();
@@ -139,13 +98,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // OPTIMIZACIÓN FASE 1: Desactivar loop automático
       p.noLoop();
       
-      const p5colors = colorCache.getColors(appState.config.colors);
+      const colors = appState.get('config.colors');
+      const p5colors = colorCache.getColors(colors);
       lumaLUT.build(p5colors, p);
       
       ui.init();
       initializeEventListeners();
       ui.updateColorPickers(appState, colorCache, lumaLUT, p);
-      ui.updatePanelsVisibility(appState.config);
+      ui.updatePanelsVisibility(appState.get('config'));
       updatePresetList();
       setupKeyboardShortcuts();
       
@@ -155,13 +115,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     p.draw = () => {
       // OPTIMIZACIÓN FASE 1: Lógica de lazy draw
-      if (appState.mediaType === 'image' && !needsRedraw) {
+      const mediaType = appState.get('media.type');
+      if (mediaType === 'image' && !needsRedraw) {
         return;
       }
       
       p.background(0);
       
-      if (!appState.media) {
+      const media = appState.get('media.file');
+      if (!media) {
         p.fill(128);
         p.text('Arrastra un video o imagen\npara comenzar', p.width/2, p.height/2);
         updateFrameStats();
@@ -169,18 +131,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       
-      if (appState.mediaType === 'video' && appState.timeline.loopSection && 
-          appState.timeline.markerInTime !== null && appState.timeline.markerOutTime !== null) {
-        const currentTime = appState.media.time();
-        if (currentTime >= appState.timeline.markerOutTime) {
-          appState.media.time(appState.timeline.markerInTime);
+      if (mediaType === 'video' && appState.get('timeline.loopSection') && 
+          appState.get('timeline.markerInTime') !== null && appState.get('timeline.markerOutTime') !== null) {
+        const currentTime = media.time();
+        if (currentTime >= appState.get('timeline.markerOutTime')) {
+          media.time(appState.get('timeline.markerInTime'));
         }
       }
       
       // Actualizar las LUTs de las curvas en el estado de la app
-      appState.updateConfig({ curvesLUTs: curvesEditor.getAllLUTs() });
+      appState.set('config.curvesLUTs', curvesEditor.getAllLUTs());
 
-      const cfg = appState.config;
+      const cfg = appState.get('config');
       const isDitheringActive = cfg.effect !== 'none';
       
       if (isDitheringActive) {
@@ -192,30 +154,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const buffer = bufferPool.get(pw, ph, p);
         
         if (cfg.effect === 'posterize') {
-          drawPosterize(p, buffer, appState.media, p.width, p.height, cfg, lumaLUT);
+          drawPosterize(p, buffer, media, p.width, p.height, cfg, lumaLUT);
         } else if (cfg.effect === 'blue-noise') {
-          drawBlueNoise(p, buffer, appState.media, p.width, p.height, cfg, lumaLUT, blueNoiseLUT);
+          drawBlueNoise(p, buffer, media, p.width, p.height, cfg, lumaLUT, blueNoiseLUT);
         } else if (cfg.effect === 'variable-error') {
-          drawVariableError(p, buffer, appState.media, p.width, p.height, cfg, lumaLUT);
+          drawVariableError(p, buffer, media, p.width, p.height, cfg, lumaLUT);
         } else {
-          drawDither(p, buffer, appState.media, p.width, p.height, cfg, lumaLUT, bayerLUT);
+          drawDither(p, buffer, media, p.width, p.height, cfg, lumaLUT, bayerLUT);
         }
         
         p.image(buffer, 0, 0, p.width, p.height);
       } else {
         // AUNQUE NO HAYA DITHERING, SE PUEDEN APLICAR AJUSTES DE IMAGEN
         const buffer = bufferPool.get(p.width, p.height, p);
-        buffer.image(appState.media, 0, 0, p.width, p.height);
+        buffer.image(media, 0, 0, p.width, p.height);
         buffer.loadPixels();
         applyImageAdjustments(buffer.pixels, cfg);
         buffer.updatePixels();
         p.image(buffer, 0, 0, p.width, p.height);
       }
       
-      if (updateTimelineUI && appState.mediaType === 'video') updateTimelineUI();
+      if (updateTimelineUI && mediaType === 'video') updateTimelineUI();
       updateFrameStats();
       
-      if (appState.mediaType === 'image') {
+      if (mediaType === 'image') {
         needsRedraw = false;
       }
     };
@@ -227,7 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const tempCanvas = p.createGraphics(100, 100);
         tempCanvas.pixelDensity(1);
 
-        if (appState.mediaType === 'video') {
+        const mediaType = appState.get('media.type');
+        if (mediaType === 'video') {
             media.pause();
             media.time(0);
             await new Promise(r => setTimeout(r, 200));
@@ -392,27 +355,29 @@ document.addEventListener('DOMContentLoaded', () => {
       // Controles
       ui.elements.playBtn.addEventListener("click", togglePlay);
       ui.elements.restartBtn.addEventListener("click", () => {
-        if (appState.media && appState.mediaType === 'video') {
-          appState.media.time(0);
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          media.time(0);
           setTimeout(triggerRedraw, 50);
           showToast('Reiniciado');
         }
       });
       
       ui.elements.effectSelect.addEventListener("change", e => {
-        appState.updateConfig({ effect: e.target.value });
-        ui.updatePanelsVisibility(appState.config);
+        appState.set('config.effect', e.target.value);
+        ui.updatePanelsVisibility(appState.get('config'));
         triggerRedraw();
       });
       
       ui.elements.monochromeToggle.addEventListener("change", e => {
-        appState.updateConfig({ isMonochrome: e.target.checked });
+        appState.set('config.isMonochrome', e.target.checked);
         ui.updateColorPickers(appState, colorCache, lumaLUT, p, true);
         triggerRedraw();
       });
       
       const debouncedColorCountChange = debounce((value) => {
-        appState.updateConfig({ colorCount: parseInt(value) });
+        appState.set('config.colorCount', parseInt(value));
         ui.updateColorPickers(appState, colorCache, lumaLUT, p, true);
         triggerRedraw();
       }, 100);
@@ -423,28 +388,28 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       ui.elements.originalColorToggle.addEventListener("change", e => {
-        appState.updateConfig({ useOriginalColor: e.target.checked });
+        appState.set('config.useOriginalColor', e.target.checked);
         ui.togglePaletteControls(e.target.checked);
         triggerRedraw();
       });
 
       const brightnessHandler = throttle(e => {
         const value = parseInt(e.target.value);
-        appState.updateConfig({ brightness: value });
+        appState.set('config.brightness', value);
         ui.elements.brightnessVal.textContent = value;
         triggerRedraw();
       }, 16);
 
       const contrastHandler = throttle(e => {
         const value = parseInt(e.target.value);
-        appState.updateConfig({ contrast: value / 100 });
+        appState.set('config.contrast', value / 100);
         ui.elements.contrastVal.textContent = value;
         triggerRedraw();
       }, 16);
 
       const saturationHandler = throttle(e => {
         const value = parseInt(e.target.value);
-        appState.updateConfig({ saturation: value / 100 });
+        appState.set('config.saturation', value / 100);
         ui.elements.saturationVal.textContent = value;
         triggerRedraw();
       }, 16);
@@ -454,7 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.elements.saturationSlider.addEventListener('input', saturationHandler);
 
       ui.elements.resetImageAdjustmentsBtn.addEventListener('click', () => {
-        appState.updateConfig({ brightness: 0, contrast: 1.0, saturation: 1.0 });
+        appState.setMultiple({
+          'config.brightness': 0,
+          'config.contrast': 1.0,
+          'config.saturation': 1.0
+        });
         ui.elements.brightnessSlider.value = 0;
         ui.elements.contrastSlider.value = 100;
         ui.elements.saturationSlider.value = 100;
@@ -498,7 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const ditherScaleHandler = throttle(e => {
-        appState.updateConfig({ ditherScale: parseInt(e.target.value) });
+        appState.set('config.ditherScale', parseInt(e.target.value));
         ui.elements.ditherScaleVal.textContent = e.target.value;
         triggerRedraw();
       }, 16);
@@ -506,12 +475,12 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.elements.ditherScale.addEventListener("input", ditherScaleHandler);
       
       ui.elements.serpentineToggle.addEventListener("change", e => {
-        appState.updateConfig({ serpentineScan: e.target.checked });
+        appState.set('config.serpentineScan', e.target.checked);
         triggerRedraw();
       });
       
       const diffusionHandler = throttle(e => {
-        appState.updateConfig({ diffusionStrength: parseInt(e.target.value) / 100 });
+        appState.set('config.diffusionStrength', parseInt(e.target.value) / 100);
         ui.elements.diffusionStrengthVal.textContent = e.target.value;
         triggerRedraw();
       }, 16);
@@ -519,7 +488,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.elements.diffusionStrengthSlider.addEventListener("input", diffusionHandler);
       
       const patternHandler = throttle(e => {
-        appState.updateConfig({ patternStrength: parseInt(e.target.value) / 100 });
+        appState.set('config.patternStrength', parseInt(e.target.value) / 100);
         ui.elements.patternStrengthVal.textContent = e.target.value;
         triggerRedraw();
       }, 16);
@@ -528,32 +497,45 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Timeline
       ui.elements.setInBtn.addEventListener('click', () => {
-        if (appState.media && appState.mediaType === 'video') {
-          appState.updateTimeline({ markerInTime: appState.media.time() });
-          showToast(`Entrada: ${formatTime(appState.timeline.markerInTime)}`);
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          const currentTime = media.time();
+          appState.set('timeline.markerInTime', currentTime);
+          showToast(`Entrada: ${formatTime(currentTime)}`);
         }
       });
       
       ui.elements.setOutBtn.addEventListener('click', () => {
-        if (appState.media && appState.mediaType === 'video') {
-          appState.updateTimeline({ markerOutTime: appState.media.time() });
-          showToast(`Salida: ${formatTime(appState.timeline.markerOutTime)}`);
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          const currentTime = media.time();
+          appState.set('timeline.markerOutTime', currentTime);
+          showToast(`Salida: ${formatTime(currentTime)}`);
         }
       });
       
       ui.elements.clearMarkersBtn.addEventListener('click', () => {
-        appState.updateTimeline({ markerInTime: null, markerOutTime: null });
+        appState.setMultiple({
+          'timeline.markerInTime': null,
+          'timeline.markerOutTime': null
+        });
         showToast('Marcadores limpiados');
       });
       
       ui.elements.loopSectionToggle.addEventListener('change', e => {
-        appState.updateTimeline({ loopSection: e.target.checked });
+        appState.set('timeline.loopSection', e.target.checked);
       });
       
       ui.elements.playbackSpeedSlider.addEventListener('input', e => {
         const speed = parseInt(e.target.value) / 100;
-        appState.update({ playbackSpeed: speed });
-        if (appState.media && appState.mediaType === 'video') appState.media.speed(speed);
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          media.speed(speed);
+          appState.set('media.playbackSpeed', speed);
+        }
         ui.elements.playbackSpeedVal.textContent = speed.toFixed(2);
       });
       
@@ -561,27 +543,35 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
           const speed = parseInt(btn.dataset.speed) / 100;
           ui.elements.playbackSpeedSlider.value = speed * 100;
-          appState.update({ playbackSpeed: speed });
-          if (appState.media && appState.mediaType === 'video') appState.media.speed(speed);
+          const media = appState.get('media.file');
+          const mediaType = appState.get('media.type');
+          if (media && mediaType === 'video') {
+            media.speed(speed);
+            appState.set('media.playbackSpeed', speed);
+          }
           ui.elements.playbackSpeedVal.textContent = speed.toFixed(2);
         });
       });
       
       ui.elements.prevFrameBtn.addEventListener('click', () => {
-        if (!appState.media || appState.mediaType !== 'video') return;
-        appState.media.pause();
-        appState.update({ isPlaying: false });
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (!media || mediaType !== 'video') return;
+        media.pause();
+        appState.set('media.isPlaying', false);
         ui.elements.playBtn.textContent = 'Play';
-        appState.media.time(Math.max(0, appState.media.time() - 1/30));
+        media.time(Math.max(0, media.time() - 1/30));
         setTimeout(triggerRedraw, 50);
       });
       
       ui.elements.nextFrameBtn.addEventListener('click', () => {
-        if (!appState.media || appState.mediaType !== 'video') return;
-        appState.media.pause();
-        appState.update({ isPlaying: false });
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (!media || mediaType !== 'video') return;
+        media.pause();
+        appState.set('media.isPlaying', false);
         ui.elements.playBtn.textContent = 'Play';
-        appState.media.time(Math.min(appState.media.duration(), appState.media.time() + 1/30));
+        media.time(Math.min(media.duration(), media.time() + 1/30));
         setTimeout(triggerRedraw, 50);
       });
       
@@ -589,7 +579,8 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.elements.recBtn.addEventListener("click", startRecording);
       ui.elements.stopBtn.addEventListener("click", stopRecording);
       ui.elements.downloadImageBtn.addEventListener("click", () => {
-        if (appState.media) p.saveCanvas(canvas, `dithering_${appState.config.effect}_${Date.now()}`, 'png');
+        const media = appState.get('media.file');
+        if (media) p.saveCanvas(canvas, `dithering_${appState.get('config.effect')}_${Date.now()}`, 'png');
       });
       
       ui.elements.gifFpsSlider.addEventListener('input', e => {
@@ -611,18 +602,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       ui.elements.exportSpriteBtn.addEventListener('click', () => {
-        if (appState.media && appState.mediaType === 'video') {
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
           const cols = parseInt(ui.elements.spriteColsSlider.value);
           const frameCount = parseInt(ui.elements.spriteFrameCountSlider.value);
-          exportSpriteSheet(p, appState.media, cols, frameCount);
+          exportSpriteSheet(p, media, cols, frameCount);
         }
       });
       
       ui.elements.exportSequenceBtn.addEventListener('click', () => {
-        if (appState.media && appState.mediaType === 'video') {
-          const startTime = appState.timeline.markerInTime || 0;
-          const endTime = appState.timeline.markerOutTime || appState.media.duration();
-          exportPNGSequence(p, appState.media, startTime, endTime, 15);
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          const startTime = appState.get('timeline.markerInTime') || 0;
+          const endTime = appState.get('timeline.markerOutTime') || media.duration();
+          exportPNGSequence(p, media, startTime, endTime, 15);
         }
       });
       
@@ -631,7 +626,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = ui.elements.presetNameInput.value.trim();
         if (name) {
           const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
-          presets[name] = { ...appState.config, curves: curvesEditor.curves };
+          const config = appState.get('config');
+          presets[name] = { ...config, curves: curvesEditor.curves };
           localStorage.setItem("dither_presets", JSON.stringify(presets));
           ui.elements.presetNameInput.value = "";
           updatePresetList();
@@ -709,8 +705,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // PNG Sequence
         eventBus.on('export:png-sequence', async () => {
-          const startTime = appState.timeline.markerInTime || 0;
-          const endTime = appState.timeline.markerOutTime || appState.media.duration();
+          const startTime = appState.get('timeline.markerInTime') || 0;
+          const media = appState.get('media.file');
+          const endTime = appState.get('timeline.markerOutTime') || media.duration();
           await exportManager.exportPNGSequence(15, startTime, endTime);
         });
         
@@ -770,7 +767,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Generar paleta
             const media = appState.get('media.file');
-            const newPalette = await generatePaletteFromMedia(media, appState.get('config.colorCount'));
+            const colorCount = appState.get('config.colorCount');
+            const newPalette = await generatePaletteFromMedia(media, colorCount);
             appState.set('config.colors', newPalette);
             ui.updateColorPickers(appState, colorCache, lumaLUT, p);
             
@@ -796,12 +794,17 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       // FALLBACK: Código original si MediaManager no está disponible
-      if (appState.media) {
-        if (appState.mediaType === 'video') {
-          appState.media.pause();
-          appState.media.remove();
+      const media = appState.get('media.file');
+      if (media) {
+        const mediaType = appState.get('media.type');
+        if (mediaType === 'video') {
+          media.pause();
+          media.remove();
         }
-        appState.update({ media: null, mediaType: null });
+        appState.setMultiple({
+          'media.file': null,
+          'media.type': null
+        });
       }
       
       if (currentFileURL) {
@@ -819,13 +822,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       currentFileURL = URL.createObjectURL(file);
-      appState.update({ mediaType: isVideo ? 'video' : 'image' });
+      appState.set('media.type', isVideo ? 'video' : 'image');
       
       if (isVideo) {
-        const media = p.createVideo([currentFileURL], async () => {
+        const videoMedia = p.createVideo([currentFileURL], async () => {
           const maxDim = 2048;
-          let w = media.width;
-          let h = media.height;
+          let w = videoMedia.width;
+          let h = videoMedia.height;
           
           if (w > maxDim || h > maxDim) {
             if (w > h) { h = Math.floor(h * (maxDim / w)); w = maxDim; }
@@ -835,20 +838,24 @@ document.addEventListener('DOMContentLoaded', () => {
           const { width: canvasW, height: canvasH } = calculateCanvasDimensions(w, h);
           p.resizeCanvas(canvasW, canvasH);
           
-          appState.update({ media, isPlaying: false });
+          appState.setMultiple({
+            'media.file': videoMedia,
+            'media.isPlaying': false
+          });
 
-          const newPalette = await generatePaletteFromMedia(media, appState.config.colorCount);
-          appState.updateConfig({ colors: newPalette });
+          const colorCount = appState.get('config.colorCount');
+          const newPalette = await generatePaletteFromMedia(videoMedia, colorCount);
+          appState.set('config.colors', newPalette);
           ui.updateColorPickers(appState, colorCache, lumaLUT, p);
 
-          media.volume(0);
-          media.speed(appState.playbackSpeed);
+          videoMedia.volume(0);
+          videoMedia.speed(appState.get('media.playbackSpeed'));
           ui.elements.playBtn.textContent = 'Play';
           ui.elements.playBtn.disabled = false;
           ui.elements.recBtn.disabled = false;
           ui.elements.mediaType.textContent = 'VIDEO';
           ui.elements.mediaType.className = 'bg-blue-600 px-2 py-1 rounded text-xs';
-          ui.elements.mediaDimensions.textContent = `${media.width}x${media.height} - ${formatTime(media.duration())}`;
+          ui.elements.mediaDimensions.textContent = `${videoMedia.width}x${videoMedia.height} - ${formatTime(videoMedia.duration())}`;
           ui.elements.timelinePanel.classList.remove('hidden');
           ui.elements.gifExportPanel.classList.remove('hidden');
           ui.elements.spriteSheetPanel.classList.remove('hidden');
@@ -861,27 +868,28 @@ document.addEventListener('DOMContentLoaded', () => {
           showToast('Video cargado');
           triggerRedraw();
         });
-        media.hide();
+        videoMedia.hide();
         
       } else {
-        const media = p.loadImage(currentFileURL, async () => {
+        const imageMedia = p.loadImage(currentFileURL, async () => {
           const maxDim = 2048;
-          let w = media.width;
-          let h = media.height;
+          let w = imageMedia.width;
+          let h = imageMedia.height;
           
           if (w > maxDim || h > maxDim) {
             if (w > h) { h = Math.floor(h * (maxDim / w)); w = maxDim; }
             else { w = Math.floor(w * (maxDim / h)); h = maxDim; }
-            media.resize(w, h);
+            imageMedia.resize(w, h);
           }
           
           const { width: canvasW, height: canvasH } = calculateCanvasDimensions(w, h);
           p.resizeCanvas(canvasW, canvasH);
           
-          appState.update({ media });
+          appState.set('media.file', imageMedia);
 
-          const newPalette = await generatePaletteFromMedia(media, appState.config.colorCount);
-          appState.updateConfig({ colors: newPalette });
+          const colorCount = appState.get('config.colorCount');
+          const newPalette = await generatePaletteFromMedia(imageMedia, colorCount);
+          appState.set('config.colors', newPalette);
           ui.updateColorPickers(appState, colorCache, lumaLUT, p);
           
           ui.elements.playBtn.textContent = 'N/A';
@@ -912,42 +920,52 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       // FALLBACK: Código original
-      if (!appState.media || appState.mediaType !== 'video') return;
+      const media = appState.get('media.file');
+      const mediaType = appState.get('media.type');
+      if (!media || mediaType !== 'video') return;
       
-      if (appState.isPlaying) {
-        appState.media.pause();
+      const isPlaying = appState.get('media.isPlaying');
+      if (isPlaying) {
+        media.pause();
         ui.elements.playBtn.textContent = 'Play';
         showToast('Pausado');
+        appState.set('media.isPlaying', false);
       } else {
-        appState.media.loop();
+        media.loop();
         ui.elements.playBtn.textContent = 'Pause';
         showToast('Reproduciendo');
+        appState.set('media.isPlaying', true);
       }
-      appState.update({ isPlaying: !appState.isPlaying });
     }
 
     function startRecording() {
-      if (appState.isRecording || !appState.media || appState.mediaType !== 'video') return;
+      const media = appState.get('media.file');
+      const mediaType = appState.get('media.type');
+      const isRecording = appState.get('media.isRecording') || false;
       
-      originalDitherScale = appState.config.ditherScale;
+      if (isRecording || !media || mediaType !== 'video') return;
+      
+      originalDitherScale = appState.get('config.ditherScale');
       originalCanvasWidth = p.width;
       originalCanvasHeight = p.height;
       
       let startTime = 0;
-      let endTime = appState.media.duration();
+      let endTime = media.duration();
       
       const useMarkers = ui.elements.webmUseMarkersToggle && ui.elements.webmUseMarkersToggle.checked;
       
       if (useMarkers) {
-        if (appState.timeline.markerInTime !== null) startTime = appState.timeline.markerInTime;
-        if (appState.timeline.markerOutTime !== null) endTime = appState.timeline.markerOutTime;
+        const markerIn = appState.get('timeline.markerInTime');
+        const markerOut = appState.get('timeline.markerOutTime');
+        if (markerIn !== null) startTime = markerIn;
+        if (markerOut !== null) endTime = markerOut;
       }
       
-      appState.media.time(startTime);
+      media.time(startTime);
       
       const maxDimension = 1080;
-      let exportWidth = appState.media.width;
-      let exportHeight = appState.media.height;
+      let exportWidth = media.width;
+      let exportHeight = media.height;
       
       const longestSide = Math.max(exportWidth, exportHeight);
       if (longestSide > maxDimension) {
@@ -958,14 +976,15 @@ document.addEventListener('DOMContentLoaded', () => {
       
       p.resizeCanvas(exportWidth, exportHeight);
       
-      if (!appState.isPlaying) {
-        appState.media.loop();
-        appState.update({ isPlaying: true });
+      const isPlaying = appState.get('media.isPlaying');
+      if (!isPlaying) {
+        media.loop();
+        appState.set('media.isPlaying', true);
         ui.elements.playBtn.textContent = 'Pause';
         p.loop();
       }
       
-      appState.update({ isRecording: true });
+      appState.set('media.isRecording', true);
       chunks = [];
       
       const stream = canvas.elt.captureStream(30);
@@ -981,7 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `dithering_${appState.config.effect}_${Date.now()}.webm`;
+        a.download = `dithering_${appState.get('config.effect')}_${Date.now()}.webm`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -997,9 +1016,9 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       
       let checkInterval = null;
-      if (useMarkers && appState.timeline.markerOutTime !== null) {
+      if (useMarkers && endTime !== null) {
         checkInterval = setInterval(() => {
-          if (appState.media.time() >= endTime) stopRecording();
+          if (media.time() >= endTime) stopRecording();
         }, 100);
       }
       
@@ -1012,34 +1031,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function stopRecording() {
-      if (!appState.isRecording || !recorder) return;
+      const isRecording = appState.get('media.isRecording');
+      if (!isRecording || !recorder) return;
       if (recorder.checkInterval) {
         clearInterval(recorder.checkInterval);
         recorder.checkInterval = null;
       }
       if (recorder.state !== 'inactive') recorder.stop();
-      appState.update({ isRecording: false });
+      appState.set('media.isRecording', false);
     }
     
     async function exportGif() {
-      if (!appState.media || appState.mediaType !== 'video') return;
+      const media = appState.get('media.file');
+      const mediaType = appState.get('media.type');
+      if (!media || mediaType !== 'video') return;
       
       const fps = parseInt(ui.elements.gifFpsSlider.value);
       const useMarkers = ui.elements.gifUseMarkersToggle.checked;
       
       let startTime = 0;
-      let endTime = appState.media.duration();
+      let endTime = media.duration();
       
       if (useMarkers) {
-        if (appState.timeline.markerInTime !== null) startTime = appState.timeline.markerInTime;
-        if (appState.timeline.markerOutTime !== null) endTime = appState.timeline.markerOutTime;
+        const markerIn = appState.get('timeline.markerInTime');
+        const markerOut = appState.get('timeline.markerOutTime');
+        if (markerIn !== null) startTime = markerIn;
+        if (markerOut !== null) endTime = markerOut;
       }
       
       ui.elements.exportGifBtn.disabled = true;
       ui.elements.gifProgress.classList.remove('hidden');
       
       try {
-        const blob = await exportGifCore(p, appState.media, appState.config, startTime, endTime, fps, progress => {
+        const config = appState.get('config');
+        const blob = await exportGifCore(p, media, config, startTime, endTime, fps, progress => {
           const percent = Math.round(progress * 100);
           ui.elements.gifProgressText.textContent = `${percent}%`;
           ui.elements.gifProgressBar.style.width = `${percent}%`;
@@ -1048,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `dithering_${appState.config.effect}_${Date.now()}.gif`;
+        a.download = `dithering_${config.effect}_${Date.now()}.gif`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1065,11 +1090,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateMetrics() {
-      if (!appState.media) { showToast('Carga un medio primero'); return; }
+      const media = appState.get('media.file');
+      if (!media) { showToast('Carga un medio primero'); return; }
       
       const origBuffer = p.createGraphics(p.width, p.height);
       origBuffer.pixelDensity(1);
-      origBuffer.image(appState.media, 0, 0, p.width, p.height);
+      origBuffer.image(media, 0, 0, p.width, p.height);
       
       const processedBuffer = p.get();
       
@@ -1077,18 +1103,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const ssim = calculateSSIM(origBuffer, processedBuffer);
       const compression = calculateCompression(processedBuffer);
       
-      appState.updateMetrics({
-        psnr: psnr,
-        ssim: ssim,
-        compression: compression.ratio,
-        paletteSize: appState.config.colorCount
+      appState.setMultiple({
+        'metrics.psnr': psnr,
+        'metrics.ssim': ssim,
+        'metrics.compression': compression.ratio,
+        'metrics.paletteSize': appState.get('config.colorCount')
       });
       
       $('metricPSNR').textContent = psnr === Infinity ? '∞ dB' : psnr.toFixed(2) + ' dB';
       $('metricSSIM').textContent = ssim.toFixed(4);
       $('metricCompression').textContent = compression.ratio.toFixed(2) + '% (' + compression.unique + ' colores únicos)';
-      $('metricPaletteSize').textContent = appState.config.colorCount + ' colores';
-      $('metricProcessTime').textContent = appState.metrics.processTime.toFixed(2) + ' ms';
+      $('metricPaletteSize').textContent = appState.get('config.colorCount') + ' colores';
+      const processTime = appState.get('metrics.processTime');
+      $('metricProcessTime').textContent = processTime.toFixed(2) + ' ms';
       
       origBuffer.remove();
       showToast('Métricas actualizadas');
@@ -1125,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       function updateScrubPosition(e) {
-        const media = appState.media;
+        const media = appState.get('media.file');
         if (!media) return;
         const rect = timeline.getBoundingClientRect();
         const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
@@ -1137,7 +1164,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       
       function updateMarkerPosition(e, marker) {
-        const media = appState.media;
+        const media = appState.get('media.file');
         if (!media) return;
         const rect = timeline.getBoundingClientRect();
         const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
@@ -1145,21 +1172,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const time = percent * media.duration();
         
         if (marker === markerIn) {
-          appState.timeline.markerInTime = time;
-          if (appState.timeline.markerOutTime !== null && time > appState.timeline.markerOutTime) {
-            appState.timeline.markerOutTime = time;
+          appState.set('timeline.markerInTime', time);
+          const markerOut = appState.get('timeline.markerOutTime');
+          if (markerOut !== null && time > markerOut) {
+            appState.set('timeline.markerOutTime', time);
           }
         } else {
-          appState.timeline.markerOutTime = time;
-          if (appState.timeline.markerInTime !== null && time < appState.timeline.markerInTime) {
-            appState.timeline.markerInTime = time;
+          appState.set('timeline.markerOutTime', time);
+          const markerIn = appState.get('timeline.markerInTime');
+          if (markerIn !== null && time < markerIn) {
+            appState.set('timeline.markerInTime', time);
           }
         }
         updateTimelineUI();
       }
       
       function updateTimelineUI() {
-        const media = appState.media;
+        const media = appState.get('media.file');
         if (!media || media.duration() === 0) return;
         
         const currentTime = media.time();
@@ -1170,16 +1199,18 @@ document.addEventListener('DOMContentLoaded', () => {
         progress.style.width = percent + '%';
         timeDisplay.textContent = formatTime(currentTime);
         
-        if (appState.timeline.markerInTime !== null) {
-          const inPercent = (appState.timeline.markerInTime / duration) * 100;
+        const markerInTime = appState.get('timeline.markerInTime');
+        if (markerInTime !== null) {
+          const inPercent = (markerInTime / duration) * 100;
           markerIn.style.left = inPercent + '%';
           markerIn.style.display = 'block';
         } else {
           markerIn.style.display = 'none';
         }
         
-        if (appState.timeline.markerOutTime !== null) {
-          const outPercent = (appState.timeline.markerOutTime / duration) * 100;
+        const markerOutTime = appState.get('timeline.markerOutTime');
+        if (markerOutTime !== null) {
+          const outPercent = (markerOutTime / duration) * 100;
           markerOut.style.left = outPercent + '%';
           markerOut.style.display = 'block';
         } else {
@@ -1242,16 +1273,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!presets[name]) return;
       
       const presetData = presets[name];
-      const cfg = { ...appState.config, ...presetData };
+      const cfg = { ...presetData };
       delete cfg.curves;
 
-      appState.updateConfig(cfg);
+      // Aplicar configuración al state
+      for (const [key, value] of Object.entries(cfg)) {
+        appState.set(`config.${key}`, value);
+      }
       
       if (presetData.curves) {
         curvesEditor.curves = presetData.curves;
         curvesEditor.render();
       }
       
+      // Actualizar UI
       ui.elements.effectSelect.value = cfg.effect;
       ui.elements.monochromeToggle.checked = cfg.isMonochrome;
       ui.elements.originalColorToggle.checked = cfg.useOriginalColor;
@@ -1291,22 +1326,26 @@ document.addEventListener('DOMContentLoaded', () => {
       ui.elements.fps.textContent = isNaN(avgFps) || avgFps === 0 ? "--" : Math.round(avgFps);
       ui.elements.frameTime.textContent = isNaN(avgFt) || avgFt === 0 ? "--" : avgFt.toFixed(1);
       
-      appState.updateMetrics({ processTime: avgFt });
+      appState.set('metrics.processTime', avgFt);
       
-      if (appState.mediaType === 'video' && appState.media && appState.media.duration() > 0) {
-        ui.elements.timeDisplay.textContent = `${formatTime(appState.media.time())} / ${formatTime(appState.media.duration())}`;
+      const mediaType = appState.get('media.type');
+      const media = appState.get('media.file');
+      if (mediaType === 'video' && media && media.duration() > 0) {
+        ui.elements.timeDisplay.textContent = `${formatTime(media.time())} / ${formatTime(media.duration())}`;
       } else {
-        ui.elements.timeDisplay.textContent = appState.mediaType === 'image' ? 'Imagen Estática' : '00:00 / 00:00';
+        ui.elements.timeDisplay.textContent = mediaType === 'image' ? 'Imagen Estática' : '00:00 / 00:00';
       }
       
-      if (appState.playbackSpeed !== 1 && appState.mediaType === 'video') {
+      const playbackSpeed = appState.get('media.playbackSpeed');
+      if (playbackSpeed !== 1 && mediaType === 'video') {
         ui.elements.speedDisplay.classList.remove('hidden');
-        ui.elements.speedDisplay.querySelector('span').textContent = appState.playbackSpeed.toFixed(2) + 'x';
+        ui.elements.speedDisplay.querySelector('span').textContent = playbackSpeed.toFixed(2) + 'x';
       } else {
         ui.elements.speedDisplay.classList.add('hidden');
       }
       
-      ui.elements.effectName.textContent = ALGORITHM_NAMES[appState.config.effect] || "Desconocido";
+      const effect = appState.get('config.effect');
+      ui.elements.effectName.textContent = ALGORITHM_NAMES[effect] || "Desconocido";
     }
     
     setInterval(() => {
