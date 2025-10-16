@@ -390,34 +390,48 @@
     </div>
   </div>
 
-  <script src="js/constants.js"></script>
-  <script src="js/algorithms.js"></script>
-  <script src="js/metrics.js"></script>
-  <script src="js/export.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/app.js"></script>
-  <script src="js/pwa.js"></script>
+<!-- ========================================
+       SCRIPTS - Orden de carga correcto
+       ======================================== -->
   
-  <!-- ========== NUEVOS MÓDULOS V7 ========== -->
-  <!-- Core -->
+  <!-- 1. Constantes y datos estáticos -->
+  <script src="js/constants.js"></script>
+  
+  <!-- 2. Core v7 - EventBus primero, luego State -->
   <script src="js/core/EventBus.js"></script>
   <script src="js/core/State.js"></script>
   
-  <!-- Media -->
-  <script src="js/media/MediaManager.js"></script>
+  <!-- 3. Algoritmos (legacy) -->
+  <script src="js/algorithms.js"></script>
   
-  <!-- Processing -->
+  <!-- 4. Utilidades (legacy) -->
+  <script src="js/metrics.js"></script>
+  <script src="js/export.js"></script>
+  
+  <!-- 5. UI (legacy) -->
+  <script src="js/ui.js"></script>
+  
+  <!-- 6. Módulos v7 - Processing -->
   <script src="js/processing/AlgorithmRegistry.js"></script>
   <script src="js/processing/AlgorithmBase.js"></script>
   
-  <!-- Export -->
+  <!-- 7. Módulos v7 - Media -->
+  <script src="js/media/MediaManager.js"></script>
+  
+  <!-- 8. Módulos v7 - Export -->
   <script src="js/export/ExportManager.js"></script>
   
-  <!-- UI -->
+  <!-- 9. Módulos v7 - UI Controller -->
   <script src="js/ui/UIController.js"></script>
   
-  <!-- Main Entry Point -->
+  <!-- 10. Main app (legacy - debe cargarse antes de main.js) -->
+  <script src="js/app.js"></script>
+  
+  <!-- 11. PWA -->
+  <script src="js/pwa.js"></script>
+  
+  <!-- 12. Inicialización v7 - AL FINAL -->
   <script src="js/main.js"></script>
-  <!-- ======================================== -->
+
 </body>
 </html>
