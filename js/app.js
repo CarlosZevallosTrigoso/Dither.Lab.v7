@@ -600,79 +600,108 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       // Exportación
-      ui.elements.recBtn.addEventListener("click", startRecording);
-      ui.elements.stopBtn.addEventListener("click", stopRecording);
-      ui.elements.downloadImageBtn.addEventListener("click", () => {
-        const media = appState.get('media.file');
-        if (media) p.saveCanvas(canvas, `dithering_${appState.get('config.effect')}_${Date.now()}`, 'png');
-      });
-      
-      ui.elements.gifFpsSlider.addEventListener('input', e => {
-        ui.elements.gifFpsVal.textContent = e.target.value;
-      });
-      
-      ui.elements.gifQualitySlider.addEventListener('input', e => {
-        ui.elements.gifQualityVal.textContent = e.target.value;
-      });
-      
-      ui.elements.exportGifBtn.addEventListener('click', exportGif);
-      
-      ui.elements.spriteColsSlider.addEventListener('input', e => {
-        ui.elements.spriteCols.textContent = e.target.value;
-      });
-      
-      ui.elements.spriteFrameCountSlider.addEventListener('input', e => {
-        ui.elements.spriteFrameCount.textContent = e.target.value;
-      });
-      
-      ui.elements.exportSpriteBtn.addEventListener('click', () => {
-        const media = appState.get('media.file');
-        const mediaType = appState.get('media.type');
-        if (media && mediaType === 'video') {
-          const cols = parseInt(ui.elements.spriteColsSlider.value);
-          const frameCount = parseInt(ui.elements.spriteFrameCountSlider.value);
-          exportSpriteSheet(p, media, cols, frameCount);
-        }
-      });
-      
-      ui.elements.exportSequenceBtn.addEventListener('click', () => {
-        const media = appState.get('media.file');
-        const mediaType = appState.get('media.type');
-        if (media && mediaType === 'video') {
-          const startTime = appState.get('timeline.markerInTime') || 0;
-          const endTime = appState.get('timeline.markerOutTime') || media.duration();
-          exportPNGSequence(p, media, startTime, endTime, 15);
-        }
-      });
-      
-      // Presets
-      ui.elements.savePresetBtn.addEventListener("click", () => {
-        const name = ui.elements.presetNameInput.value.trim();
-        if (name) {
-          const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
-          const config = appState.get('config');
-          presets[name] = { ...config, curves: curvesEditor.curves };
-          localStorage.setItem("dither_presets", JSON.stringify(presets));
-          ui.elements.presetNameInput.value = "";
-          updatePresetList();
-          showToast(`Preset "${name}" guardado`);
-        }
-      });
-      
-      ui.elements.deletePresetBtn.addEventListener("click", () => {
-        const name = ui.elements.presetSelect.value;
-        if (name) {
-          const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
-          delete presets[name];
-          localStorage.setItem("dither_presets", JSON.stringify(presets));
-          updatePresetList();
-          showToast(`Preset "${name}" eliminado`);
-        }
-      });
-      
-      ui.elements.presetSelect.addEventListener("change", e => {
-        if (e.target.value) applyPreset(e.target.value);
-      });
+ui.elements.recBtn.addEventListener("click", startRecording);
+ui.elements.stopBtn.addEventListener("click", stopRecording);
+ui.elements.downloadImageBtn.addEventListener("click", () => {
+  const media = appState.get('media.file');
+  if (media) p.saveCanvas(canvas, `dithering_${appState.get('config.effect')}_${Date.now()}`, 'png');
+});
+
+ui.elements.gifFpsSlider.addEventListener('input', e => {
+  ui.elements.gifFpsVal.textContent = e.target.value;
+});
+
+ui.elements.gifQualitySlider.addEventListener('input', e => {
+  ui.elements.gifQualityVal.textContent = e.target.value;
+});
+
+ui.elements.exportGifBtn.addEventListener('click', exportGif);
+
+ui.elements.spriteColsSlider.addEventListener('input', e => {
+  ui.elements.spriteCols.textContent = e.target.value;
+});
+
+ui.elements.spriteFrameCountSlider.addEventListener('input', e => {
+  ui.elements.spriteFrameCount.textContent = e.target.value;
+});
+
+ui.elements.exportSpriteBtn.addEventListener('click', () => {
+  const media = appState.get('media.file');
+  const mediaType = appState.get('media.type');
+  if (media && mediaType === 'video') {
+    const cols = parseInt(ui.elements.spriteColsSlider.value);
+    const frameCount = parseInt(ui.elements.spriteFrameCountSlider.value);
+    exportSpriteSheet(p, media, cols, frameCount);
+  }
+});
+
+ui.elements.exportSequenceBtn.addEventListener('click', () => {
+  const media = appState.get('media.file');
+  const mediaType = appState.get('media.type');
+  if (media && mediaType === 'video') {
+    const startTime = appState.get('timeline.markerInTime') || 0;
+    const endTime = appState.get('timeline.markerOutTime') || media.duration();
+    exportPNGSequence(p, media, startTime, endTime, 15);
+  }
+});
+
+// Actualizar info de tamaño de exportación
+document.querySelectorAll('input[name="exportSize"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    const media = appState.get('media.file');
+    const infoEl = document.getElementById('exportSizeInfo');
+    
+    if (!media || !infoEl) return;
+    
+    const value = e.target.value;
+    
+    if (value === 'canvas') {
+      infoEl.textContent = `${p.width} × ${p.height}px`;
+    } else if (value === 'large') {
+      const maxDim = 1024;
+      let w, h;
+      if (media.width > media.height) {
+        w = maxDim;
+        h = Math.floor(media.height * (maxDim / media.width));
+      } else {
+        h = maxDim;
+        w = Math.floor(media.width * (maxDim / media.height));
+      }
+      infoEl.textContent = `${w} × ${h}px`;
+    } else if (value === 'original') {
+      infoEl.textContent = `${media.width} × ${media.height}px (Original)`;
+    }
+  });
+});
+
+// Presets
+ui.elements.savePresetBtn.addEventListener("click", () => {
+  const name = ui.elements.presetNameInput.value.trim();
+  if (name) {
+    const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
+    const config = appState.get('config');
+    presets[name] = { ...config, curves: curvesEditor.curves };
+    localStorage.setItem("dither_presets", JSON.stringify(presets));
+    ui.elements.presetNameInput.value = "";
+    updatePresetList();
+    showToast(`Preset "${name}" guardado`);
+  }
+});
+
+ui.elements.deletePresetBtn.addEventListener("click", () => {
+  const name = ui.elements.presetSelect.value;
+  if (name) {
+    const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
+    delete presets[name];
+    localStorage.setItem("dither_presets", JSON.stringify(presets));
+    updatePresetList();
+    showToast(`Preset "${name}" eliminado`);
+  }
+});
+
+ui.elements.presetSelect.addEventListener("change", e => {
+  if (e.target.value) applyPreset(e.target.value);
+});
       
       // Modals
       ui.elements.shortcutsBtn.addEventListener('click', () => {
