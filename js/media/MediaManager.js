@@ -19,7 +19,8 @@ class MediaManager {
     this.supportedImageFormats = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp'];
     
     // Límites de tamaño
-    this.maxDimension = 2048;
+    this.maxVideoDimension = 2048;  // 2K para videos
+    this.maxImageDimension = 2048;  // 2048px para imágenes
     this.maxFileSize = 500 * 1024 * 1024; // 500MB
     
     console.log('📹 MediaManager inicializado');
@@ -168,15 +169,15 @@ class MediaManager {
           let width = video.width;
           let height = video.height;
           
-          // Redimensionar si excede límites
-          if (width > this.maxDimension || height > this.maxDimension) {
+          // Redimensionar si excede límites (2K para videos)
+          if (width > this.maxVideoDimension || height > this.maxVideoDimension) {
             const aspectRatio = width / height;
             
             if (width > height) {
-              width = this.maxDimension;
+              width = this.maxVideoDimension;
               height = Math.floor(width / aspectRatio);
             } else {
-              height = this.maxDimension;
+              height = this.maxVideoDimension;
               width = Math.floor(height * aspectRatio);
             }
           }
@@ -245,18 +246,18 @@ class MediaManager {
           const originalWidth = img.width;
           const originalHeight = img.height;
           
-          // Redimensionar si excede límites
+          // Redimensionar si excede límites (2048px para imágenes)
           let width = originalWidth;
           let height = originalHeight;
           
-          if (width > this.maxDimension || height > this.maxDimension) {
+          if (width > this.maxImageDimension || height > this.maxImageDimension) {
             const aspectRatio = width / height;
             
             if (width > height) {
-              width = this.maxDimension;
+              width = this.maxImageDimension;
               height = Math.floor(width / aspectRatio);
             } else {
-              height = this.maxDimension;
+              height = this.maxImageDimension;
               width = Math.floor(height * aspectRatio);
             }
             
