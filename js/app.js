@@ -295,23 +295,47 @@ document.addEventListener('DOMContentLoaded', () => {
         return centroids.map(toHex);
     }
     
-    function calculateCanvasDimensions(mediaWidth, mediaHeight) {
-      const container = document.getElementById('canvasContainer');
-      
-      let containerWidth = container.clientWidth || window.innerWidth;
-      let containerHeight = container.clientHeight || window.innerHeight;
-      
-      if (containerWidth < 100) containerWidth = 800;
-      if (containerHeight < 100) containerHeight = 600;
-      
-      const padding = 64;
-      const availableWidth = containerWidth - padding;
-      const availableHeight = containerHeight - padding;
-      
-      if (availableWidth <= 0 || availableHeight <= 0) {
+       function calculateCanvasDimensions(mediaWidth, mediaHeight) {
+        const container = document.getElementById('canvasContainer');
+  
+        let containerWidth = container.clientWidth || window.innerWidth;
+        let containerHeight = container.clientHeight || window.innerHeight;
+  
+        if (containerWidth < 100) containerWidth = 800;
+        if (containerHeight < 100) containerHeight = 600;
+  
+  // CAMBIO: Reducir padding de 64 a 16 para aprovechar más espacio
+        const padding = 16;
+        const availableWidth = containerWidth - padding;
+        const availableHeight = containerHeight - padding;
+  
+        if (availableWidth <= 0 || availableHeight <= 0) {
         console.warn('Dimensiones de contenedor inválidas, usando valores por defecto');
         return { width: 400, height: 225 };
-      }
+  }
+  
+  const mediaAspect = mediaWidth / mediaHeight;
+  const containerAspect = availableWidth / availableHeight;
+  
+  let canvasW, canvasH;
+  
+  if (mediaAspect > containerAspect) {
+    // CAMBIO: Usar el espacio disponible directamente, sin limitar al tamaño del media
+    canvasW = availableWidth;
+    canvasH = canvasW / mediaAspect;
+  } else {
+    canvasH = availableHeight;
+    canvasW = canvasH * mediaAspect;
+  }
+  
+  // CAMBIO: Asegurar que no exceda el contenedor pero sin límite artificial
+  canvasW = Math.min(availableWidth, Math.max(100, Math.floor(canvasW)));
+  canvasH = Math.min(availableHeight, Math.max(100, Math.floor(canvasH)));
+  
+  console.log(`📐 Canvas dimensions: ${canvasW}x${canvasH} (media: ${mediaWidth}x${mediaHeight}, container: ${containerWidth}x${containerHeight})`);
+  
+  return { width: canvasW, height: canvasH };
+}
       
       const mediaAspect = mediaWidth / mediaHeight;
       const containerAspect = availableWidth / availableHeight;
