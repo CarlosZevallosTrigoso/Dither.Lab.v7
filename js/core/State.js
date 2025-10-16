@@ -1,129 +1,289 @@
 // ============================================================================
-// EVENT BUS - Sistema de comunicación desacoplado
+// STATE MANAGER - Gestión centralizada del estado
 // ============================================================================
-// Permite que los módulos se comuniquen sin conocerse directamente
-// Ejemplo: MediaManager emite 'media:loaded' y varios componentes escuchan
+// Maneja el estado de la aplicación de forma reactiva con dot notation
 
-class EventBus {
-  constructor() {
-    // Mapa de eventos -> array de callbacks
+class State {
+  constructor(eventBus) {
+    this.eventBus = eventBus;
+    
+    // Estado inicial
+    this.data = {
+      // Media
+      media: {
+        file: null,
+        type: null, // 'image' | 'video'
+        isPlaying: false,
+        duration: 0,
+        currentTime: 0,
+        playbackSpeed: 1
+      },
+      
+      // Configuración de dithering
+      config: {
+        effect: 'floyd-steinberg',
+        isMonochrome: false,
+        useOriginalColor: false,
+        colorCount: 4,
+        colors: [],
+        ditherScale: 2,
+        serpentineScan: false,
+        diffusionStrength: 1.0,
+        patternStrength: 0.5,
+        brightness: 0,
+        contrast: 1.0,
+        saturation: 1.0,
+        curvesLUTs: null,
+        algorithmParams: {}
+      },
+      
+      // Timeline (solo para videos)
+      timeline: {
+        markerInTime: null,
+        markerOutTime: null,
+        loopSection: false
+      },
+      
+      // Métricas
+      metrics: {
+        fps: 0,
+        processTime: 0,
+        psnr: 0,
+        ssim: 0,
+        compression: 0,
+        paletteSize: 0
+      }
+    };
+    
+    // Listeners para cambios de estado
     this.listeners = new Map();
     
-    // Para debugging (opcional)
-    this.debug = false;
+    console.log('📊 State Manager inicializado');
   }
-
+  
   /**
-   * Registrar un listener para un evento
-   * @param {string} event - Nombre del evento (ej: 'media:loaded')
-   * @param {function} callback - Función a ejecutar cuando ocurra el evento
-   * @returns {function} - Función para desuscribirse
+   * Obtener valor usando dot notation
+   * @param {string} path - Ruta con puntos (ej: 'media.type')
+   * @returns {*}
    */
-  on(event, callback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, []);
+  get(path) {
+    if (!path) return this.data;
+    
+    const keys = path.split('.');
+    let value = this.data;
+    
+    for (const key of keys) {
+      if (value === undefined || value === null) return undefined;
+      value = value[key];
     }
     
-    this.listeners.get(event).push(callback);
-    
-    if (this.debug) {
-      console.log(`[EventBus] Listener registrado: ${event}`);
-    }
-    
-    // Retornar función para desuscribirse fácilmente
-    return () => this.off(event, callback);
+    return value;
   }
-
+  
   /**
-   * Emitir un evento
-   * @param {string} event - Nombre del evento
-   * @param {*} data - Datos a pasar a los listeners
+   * Establecer valor usando dot notation
+   * @param {string} path - Ruta con puntos (ej: 'media.type')
+   * @param {*} value - Nuevo valor
+   * @param {boolean} silent - Si es true, no emite eventos
    */
-  emit(event, data) {
-    const callbacks = this.listeners.get(event);
+  set(path, value, silent = false) {
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    let target = this.data;
     
-    if (!callbacks || callbacks.length === 0) {
-      if (this.debug) {
-        console.log(`[EventBus] Evento emitido sin listeners: ${event}`);
+    // Navegar hasta el objeto padre
+    for (const key of keys) {
+      if (!(key in target)) {
+        target[key] = {};
       }
+      target = target[key];
+    }
+    
+    const oldValue = target[lastKey];
+    target[lastKey] = value;
+    
+    // Emitir evento de cambio
+    if (!silent) {
+      this.notifyChange(path, value, oldValue);
+    }
+  }
+  
+  /**
+   * Establecer múltiples valores a la vez
+   * @param {object} updates - Objeto con paths como keys y valores como values
+   * @param {boolean} silent - Si es true, no emite eventos
+   */
+  setMultiple(updates, silent = false) {
+    for (const [path, value] of Object.entries(updates)) {
+      this.set(path, value, silent);
+    }
+  }
+  
+  /**
+   * Actualizar parcialmente un objeto
+   * @param {string} path - Ruta al objeto
+   * @param {object} updates - Propiedades a actualizar
+   */
+  update(path, updates) {
+    const current = this.get(path);
+    if (typeof current !== 'object' || current === null) {
+      console.warn(`[State] Cannot update non-object at path: ${path}`);
       return;
     }
     
-    if (this.debug) {
-      console.log(`[EventBus] Emitiendo: ${event}`, data);
+    const updated = { ...current, ...updates };
+    this.set(path, updated);
+  }
+  
+  /**
+   * Suscribirse a cambios de estado
+   * @param {function} callback - Función que recibe (path, newValue, oldValue)
+   * @returns {function} - Función para desuscribirse
+   */
+  subscribe(callback) {
+    const id = Symbol();
+    this.listeners.set(id, callback);
+    
+    return () => {
+      this.listeners.delete(id);
+    };
+  }
+  
+  /**
+   * Notificar a los listeners sobre un cambio
+   * @param {string} path - Ruta que cambió
+   * @param {*} newValue - Nuevo valor
+   * @param {*} oldValue - Valor anterior
+   */
+  notifyChange(path, newValue, oldValue) {
+    // Emitir evento en EventBus
+    if (this.eventBus) {
+      this.eventBus.emit('state:changed', { path, newValue, oldValue });
     }
     
-    // Ejecutar todos los callbacks
-    callbacks.forEach(callback => {
+    // Notificar a listeners directos
+    for (const callback of this.listeners.values()) {
       try {
-        callback(data);
+        callback(path, newValue, oldValue);
       } catch (error) {
-        console.error(`[EventBus] Error en listener de "${event}":`, error);
-      }
-    });
-  }
-
-  /**
-   * Desuscribirse de un evento
-   * @param {string} event - Nombre del evento
-   * @param {function} callback - Callback a remover
-   */
-  off(event, callback) {
-    const callbacks = this.listeners.get(event);
-    
-    if (!callbacks) return;
-    
-    const index = callbacks.indexOf(callback);
-    if (index > -1) {
-      callbacks.splice(index, 1);
-      
-      if (this.debug) {
-        console.log(`[EventBus] Listener removido: ${event}`);
+        console.error('[State] Error en listener:', error);
       }
     }
-    
-    // Limpiar el array si está vacío
-    if (callbacks.length === 0) {
-      this.listeners.delete(event);
-    }
   }
-
+  
   /**
-   * Remover todos los listeners de un evento
-   * @param {string} event - Nombre del evento
+   * Resetear estado a valores iniciales
+   * @param {string} path - Ruta a resetear (opcional, resetea todo si no se especifica)
    */
-  clear(event) {
-    if (event) {
-      this.listeners.delete(event);
+  reset(path = null) {
+    if (path) {
+      // Resetear solo una sección
+      const initialValue = this.getInitialValue(path);
+      if (initialValue !== undefined) {
+        this.set(path, initialValue);
+      }
     } else {
-      this.listeners.clear();
+      // Resetear todo
+      const oldData = this.data;
+      this.data = this.getInitialState();
+      this.notifyChange('', this.data, oldData);
     }
   }
-
+  
   /**
-   * Obtener número de listeners para un evento (útil para debugging)
-   * @param {string} event - Nombre del evento
-   * @returns {number}
+   * Obtener estado inicial
+   * @returns {object}
    */
-  listenerCount(event) {
-    const callbacks = this.listeners.get(event);
-    return callbacks ? callbacks.length : 0;
+  getInitialState() {
+    return {
+      media: {
+        file: null,
+        type: null,
+        isPlaying: false,
+        duration: 0,
+        currentTime: 0,
+        playbackSpeed: 1
+      },
+      config: {
+        effect: 'floyd-steinberg',
+        isMonochrome: false,
+        useOriginalColor: false,
+        colorCount: 4,
+        colors: [],
+        ditherScale: 2,
+        serpentineScan: false,
+        diffusionStrength: 1.0,
+        patternStrength: 0.5,
+        brightness: 0,
+        contrast: 1.0,
+        saturation: 1.0,
+        curvesLUTs: null,
+        algorithmParams: {}
+      },
+      timeline: {
+        markerInTime: null,
+        markerOutTime: null,
+        loopSection: false
+      },
+      metrics: {
+        fps: 0,
+        processTime: 0,
+        psnr: 0,
+        ssim: 0,
+        compression: 0,
+        paletteSize: 0
+      }
+    };
   }
-
+  
   /**
-   * Activar/desactivar modo debug
-   * @param {boolean} enabled
+   * Obtener valor inicial de un path
+   * @param {string} path - Ruta
+   * @returns {*}
    */
-  setDebug(enabled) {
-    this.debug = enabled;
+  getInitialValue(path) {
+    const initial = this.getInitialState();
+    const keys = path.split('.');
+    let value = initial;
+    
+    for (const key of keys) {
+      if (value === undefined || value === null) return undefined;
+      value = value[key];
+    }
+    
+    return value;
+  }
+  
+  /**
+   * Exportar estado completo (útil para debugging o guardar)
+   * @returns {object}
+   */
+  export() {
+    return JSON.parse(JSON.stringify(this.data));
+  }
+  
+  /**
+   * Importar estado completo
+   * @param {object} data - Estado a importar
+   */
+  import(data) {
+    this.data = JSON.parse(JSON.stringify(data));
+    this.notifyChange('', this.data, null);
+  }
+  
+  /**
+   * Imprimir estado en consola (debugging)
+   */
+  print() {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📊 Estado actual de la aplicación');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(JSON.stringify(this.data, null, 2));
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   }
 }
 
-// Exportar instancia singleton
-const eventBus = new EventBus();
-
-// Hacer disponible globalmente
+// Exportar
 if (typeof window !== 'undefined') {
-  window.EventBus = EventBus;
-  window.eventBus = eventBus;
+  window.State = State;
 }
