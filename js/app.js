@@ -295,66 +295,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return centroids.map(toHex);
     }
     
-       function calculateCanvasDimensions(mediaWidth, mediaHeight) {
-        const container = document.getElementById('canvasContainer');
-  
-        let containerWidth = container.clientWidth || window.innerWidth;
-        let containerHeight = container.clientHeight || window.innerHeight;
-  
-        if (containerWidth < 100) containerWidth = 800;
-        if (containerHeight < 100) containerHeight = 600;
-  
-  // CAMBIO: Reducir padding de 64 a 16 para aprovechar más espacio
-        const padding = 16;
-        const availableWidth = containerWidth - padding;
-        const availableHeight = containerHeight - padding;
-  
-        if (availableWidth <= 0 || availableHeight <= 0) {
+    function calculateCanvasDimensions(mediaWidth, mediaHeight) {
+      const container = document.getElementById('canvasContainer');
+
+      let containerWidth = container.clientWidth || window.innerWidth;
+      let containerHeight = container.clientHeight || window.innerHeight;
+
+      if (containerWidth < 100) containerWidth = 800;
+      if (containerHeight < 100) containerHeight = 600;
+
+      // CAMBIO: Reducir padding de 64 a 16 para aprovechar más espacio
+      const padding = 16;
+      const availableWidth = containerWidth - padding;
+      const availableHeight = containerHeight - padding;
+
+      if (availableWidth <= 0 || availableHeight <= 0) {
         console.warn('Dimensiones de contenedor inválidas, usando valores por defecto');
         return { width: 400, height: 225 };
-  }
-  
-  const mediaAspect = mediaWidth / mediaHeight;
-  const containerAspect = availableWidth / availableHeight;
-  
-  let canvasW, canvasH;
-  
-  if (mediaAspect > containerAspect) {
-    // CAMBIO: Usar el espacio disponible directamente, sin limitar al tamaño del media
-    canvasW = availableWidth;
-    canvasH = canvasW / mediaAspect;
-  } else {
-    canvasH = availableHeight;
-    canvasW = canvasH * mediaAspect;
-  }
-  
-  // CAMBIO: Asegurar que no exceda el contenedor pero sin límite artificial
-  canvasW = Math.min(availableWidth, Math.max(100, Math.floor(canvasW)));
-  canvasH = Math.min(availableHeight, Math.max(100, Math.floor(canvasH)));
-  
-  console.log(`📐 Canvas dimensions: ${canvasW}x${canvasH} (media: ${mediaWidth}x${mediaHeight}, container: ${containerWidth}x${containerHeight})`);
-  
-  return { width: canvasW, height: canvasH };
-}
-      
+      }
+
       const mediaAspect = mediaWidth / mediaHeight;
       const containerAspect = availableWidth / availableHeight;
-      
+
       let canvasW, canvasH;
-      
+
       if (mediaAspect > containerAspect) {
-        canvasW = Math.min(mediaWidth, availableWidth);
+        // CAMBIO: Usar el espacio disponible directamente, sin limitar al tamaño del media
+        canvasW = availableWidth;
         canvasH = canvasW / mediaAspect;
       } else {
-        canvasH = Math.min(mediaHeight, availableHeight);
+        canvasH = availableHeight;
         canvasW = canvasH * mediaAspect;
       }
-      
-      canvasW = Math.max(100, Math.floor(canvasW));
-      canvasH = Math.max(100, Math.floor(canvasH));
-      
+
+      // CAMBIO: Asegurar que no exceda el contenedor pero sin límite artificial
+      canvasW = Math.min(availableWidth, Math.max(100, Math.floor(canvasW)));
+      canvasH = Math.min(availableHeight, Math.max(100, Math.floor(canvasH)));
+
       console.log(`📐 Canvas dimensions: ${canvasW}x${canvasH} (media: ${mediaWidth}x${mediaHeight}, container: ${containerWidth}x${containerHeight})`);
-      
+
       return { width: canvasW, height: canvasH };
     }
 
@@ -600,108 +579,116 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       // Exportación
-ui.elements.recBtn.addEventListener("click", startRecording);
-ui.elements.stopBtn.addEventListener("click", stopRecording);
-ui.elements.downloadImageBtn.addEventListener("click", () => {
-  const media = appState.get('media.file');
-  if (media) p.saveCanvas(canvas, `dithering_${appState.get('config.effect')}_${Date.now()}`, 'png');
-});
+      ui.elements.recBtn.addEventListener("click", startRecording);
+      ui.elements.stopBtn.addEventListener("click", stopRecording);
+      
+      // 🔧 FIX: Usar ExportManager para PNG con tamaños personalizados
+      ui.elements.downloadImageBtn.addEventListener("click", () => {
+        // Usar ExportManager si está disponible
+        if (window.exportManager) {
+          exportManager.exportPNG();
+        } else {
+          // Fallback legacy
+          const media = appState.get('media.file');
+          if (media) p.saveCanvas(canvas, `dithering_${appState.get('config.effect')}_${Date.now()}`, 'png');
+        }
+      });
 
-ui.elements.gifFpsSlider.addEventListener('input', e => {
-  ui.elements.gifFpsVal.textContent = e.target.value;
-});
+      ui.elements.gifFpsSlider.addEventListener('input', e => {
+        ui.elements.gifFpsVal.textContent = e.target.value;
+      });
 
-ui.elements.gifQualitySlider.addEventListener('input', e => {
-  ui.elements.gifQualityVal.textContent = e.target.value;
-});
+      ui.elements.gifQualitySlider.addEventListener('input', e => {
+        ui.elements.gifQualityVal.textContent = e.target.value;
+      });
 
-ui.elements.exportGifBtn.addEventListener('click', exportGif);
+      ui.elements.exportGifBtn.addEventListener('click', exportGif);
 
-ui.elements.spriteColsSlider.addEventListener('input', e => {
-  ui.elements.spriteCols.textContent = e.target.value;
-});
+      ui.elements.spriteColsSlider.addEventListener('input', e => {
+        ui.elements.spriteCols.textContent = e.target.value;
+      });
 
-ui.elements.spriteFrameCountSlider.addEventListener('input', e => {
-  ui.elements.spriteFrameCount.textContent = e.target.value;
-});
+      ui.elements.spriteFrameCountSlider.addEventListener('input', e => {
+        ui.elements.spriteFrameCount.textContent = e.target.value;
+      });
 
-ui.elements.exportSpriteBtn.addEventListener('click', () => {
-  const media = appState.get('media.file');
-  const mediaType = appState.get('media.type');
-  if (media && mediaType === 'video') {
-    const cols = parseInt(ui.elements.spriteColsSlider.value);
-    const frameCount = parseInt(ui.elements.spriteFrameCountSlider.value);
-    exportSpriteSheet(p, media, cols, frameCount);
-  }
-});
+      ui.elements.exportSpriteBtn.addEventListener('click', () => {
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          const cols = parseInt(ui.elements.spriteColsSlider.value);
+          const frameCount = parseInt(ui.elements.spriteFrameCountSlider.value);
+          exportSpriteSheet(p, media, cols, frameCount);
+        }
+      });
 
-ui.elements.exportSequenceBtn.addEventListener('click', () => {
-  const media = appState.get('media.file');
-  const mediaType = appState.get('media.type');
-  if (media && mediaType === 'video') {
-    const startTime = appState.get('timeline.markerInTime') || 0;
-    const endTime = appState.get('timeline.markerOutTime') || media.duration();
-    exportPNGSequence(p, media, startTime, endTime, 15);
-  }
-});
+      ui.elements.exportSequenceBtn.addEventListener('click', () => {
+        const media = appState.get('media.file');
+        const mediaType = appState.get('media.type');
+        if (media && mediaType === 'video') {
+          const startTime = appState.get('timeline.markerInTime') || 0;
+          const endTime = appState.get('timeline.markerOutTime') || media.duration();
+          exportPNGSequence(p, media, startTime, endTime, 15);
+        }
+      });
 
-// Actualizar info de tamaño de exportación
-document.querySelectorAll('input[name="exportSize"]').forEach(radio => {
-  radio.addEventListener('change', (e) => {
-    const media = appState.get('media.file');
-    const infoEl = document.getElementById('exportSizeInfo');
-    
-    if (!media || !infoEl) return;
-    
-    const value = e.target.value;
-    
-    if (value === 'canvas') {
-      infoEl.textContent = `${p.width} × ${p.height}px`;
-    } else if (value === 'large') {
-      const maxDim = 1024;
-      let w, h;
-      if (media.width > media.height) {
-        w = maxDim;
-        h = Math.floor(media.height * (maxDim / media.width));
-      } else {
-        h = maxDim;
-        w = Math.floor(media.width * (maxDim / media.height));
-      }
-      infoEl.textContent = `${w} × ${h}px`;
-    } else if (value === 'original') {
-      infoEl.textContent = `${media.width} × ${media.height}px (Original)`;
-    }
-  });
-});
+      // 🔧 FIX: Corregir referencia de p.width/p.height a canvas.width/canvas.height
+      document.querySelectorAll('input[name="exportSize"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+          const media = appState.get('media.file');
+          const infoEl = document.getElementById('exportSizeInfo');
+          
+          if (!media || !infoEl) return;
+          
+          const value = e.target.value;
+          
+          if (value === 'canvas') {
+            infoEl.textContent = `${canvas.width} × ${canvas.height}px`;
+          } else if (value === 'large') {
+            const maxDim = 1024;
+            let w, h;
+            if (media.width > media.height) {
+              w = maxDim;
+              h = Math.floor(media.height * (maxDim / media.width));
+            } else {
+              h = maxDim;
+              w = Math.floor(media.width * (maxDim / media.height));
+            }
+            infoEl.textContent = `${w} × ${h}px`;
+          } else if (value === 'original') {
+            infoEl.textContent = `${media.width} × ${media.height}px (Original)`;
+          }
+        });
+      });
 
-// Presets
-ui.elements.savePresetBtn.addEventListener("click", () => {
-  const name = ui.elements.presetNameInput.value.trim();
-  if (name) {
-    const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
-    const config = appState.get('config');
-    presets[name] = { ...config, curves: curvesEditor.curves };
-    localStorage.setItem("dither_presets", JSON.stringify(presets));
-    ui.elements.presetNameInput.value = "";
-    updatePresetList();
-    showToast(`Preset "${name}" guardado`);
-  }
-});
+      // Presets
+      ui.elements.savePresetBtn.addEventListener("click", () => {
+        const name = ui.elements.presetNameInput.value.trim();
+        if (name) {
+          const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
+          const config = appState.get('config');
+          presets[name] = { ...config, curves: curvesEditor.curves };
+          localStorage.setItem("dither_presets", JSON.stringify(presets));
+          ui.elements.presetNameInput.value = "";
+          updatePresetList();
+          showToast(`Preset "${name}" guardado`);
+        }
+      });
 
-ui.elements.deletePresetBtn.addEventListener("click", () => {
-  const name = ui.elements.presetSelect.value;
-  if (name) {
-    const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
-    delete presets[name];
-    localStorage.setItem("dither_presets", JSON.stringify(presets));
-    updatePresetList();
-    showToast(`Preset "${name}" eliminado`);
-  }
-});
+      ui.elements.deletePresetBtn.addEventListener("click", () => {
+        const name = ui.elements.presetSelect.value;
+        if (name) {
+          const presets = JSON.parse(localStorage.getItem("dither_presets") || "{}");
+          delete presets[name];
+          localStorage.setItem("dither_presets", JSON.stringify(presets));
+          updatePresetList();
+          showToast(`Preset "${name}" eliminado`);
+        }
+      });
 
-ui.elements.presetSelect.addEventListener("change", e => {
-  if (e.target.value) applyPreset(e.target.value);
-});
+      ui.elements.presetSelect.addEventListener("change", e => {
+        if (e.target.value) applyPreset(e.target.value);
+      });
       
       // Modals
       ui.elements.shortcutsBtn.addEventListener('click', () => {
@@ -837,6 +824,29 @@ ui.elements.presetSelect.addEventListener("change", e => {
             
             triggerRedraw();
             showToast(mediaInfo.type === 'video' ? 'Video cargado' : 'Imagen cargada');
+            
+            // 🔧 FIX: Actualizar info de tamaño de exportación después de cargar
+            const exportSizeRadio = document.querySelector('input[name="exportSize"]:checked');
+            const infoEl = document.getElementById('exportSizeInfo');
+            if (exportSizeRadio && infoEl && mediaInfo) {
+              const value = exportSizeRadio.value;
+              if (value === 'canvas') {
+                infoEl.textContent = `${canvasW} × ${canvasH}px`;
+              } else if (value === 'large') {
+                const maxDim = 1024;
+                let w, h;
+                if (mediaInfo.resizedWidth > mediaInfo.resizedHeight) {
+                  w = maxDim;
+                  h = Math.floor(mediaInfo.resizedHeight * (maxDim / mediaInfo.resizedWidth));
+                } else {
+                  h = maxDim;
+                  w = Math.floor(mediaInfo.resizedWidth * (maxDim / mediaInfo.resizedHeight));
+                }
+                infoEl.textContent = `${w} × ${h}px`;
+              } else if (value === 'original') {
+                infoEl.textContent = `${mediaInfo.width} × ${mediaInfo.height}px (Original)`;
+              }
+            }
           });
           
         } catch (error) {
