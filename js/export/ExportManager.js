@@ -58,41 +58,164 @@ class ExportManager {
   }
   
   // ============================================================================
-  // EXPORTACIÓN PNG
-  // ============================================================================
+// EXPORTACIÓN PNG
+// ============================================================================
+
+/**
+ * Exportar frame actual como PNG
+ * @param {string} filename - Nombre del archivo (opcional)
+ */
+exportPNG(filename = null) {
+  const check = this.canExport();
+  if (!check.canExport) {
+    this.eventBus.emit('export:error', { message: check.reason });
+    return;
+  }
   
-  /**
-   * Exportar frame actual como PNG
-   * @param {string} filename - Nombre del archivo (opcional)
-   */
-  exportPNG(filename = null) {
-    const check = this.canExport();
-    if (!check.canExport) {
-      this.eventBus.emit('export:error', { message: check.reason });
-      return;
-    }
+  if (!this.p5Instance || !this.canvas) {
+    this.eventBus.emit('export:error', { message: 'Canvas no disponible' });
+    return;
+  }
+  
+  const effect = this.state.get('config.effect');
+  const timestamp = Date.now();
+  const finalFilename = filename || `dithering_${effect}_${timestamp}.png`;
+  
+  // Obtener tamaño de exportación seleccionado
+  const exportSizeRadio = document.querySelector('input[name="exportSize"]:checked');
+  const exportSize = exportSizeRadio ? exportSizeRadio.value : 'canvas';
+  
+  try {
+    this.eventBus.emit('export:started', { type: 'png', filename: finalFilename });
     
-    if (!this.p5Instance || !this.canvas) {
-      this.eventBus.emit('export:error', { message: 'Canvas no disponible' });
-      return;
-    }
-    
-    const effect = this.state.get('config.effect');
-    const timestamp = Date.now();
-    const finalFilename = filename || `dithering_${effect}_${timestamp}.png`;
-    
-    try {
-      this.eventBus.emit('export:started', { type: 'png', filename: finalFilename });
-      
+    if (exportSize === 'canvas') {
+      // Exportar canvas actual (comportamiento original)
       this.p5Instance.saveCanvas(this.canvas, finalFilename, 'png');
-      
-      this.eventBus.emit('export:completed', { type: 'png', filename: finalFilename });
-      
-    } catch (error) {
-      console.error('[ExportManager] Error exportando PNG:', error);
-      this.eventBus.emit('export:error', { message: error.message });
+    } else {
+      // Exportar en tamaño diferente
+      this.exportPNGCustomSize(exportSize, finalFilename);
+    }
+    
+    this.eventBus.emit('export:completed', { type: 'png', filename: finalFilename });
+    
+  } catch (error) {
+    console.error('[ExportManager] Error exportando PNG:', error);
+    this.eventBus.emit('export:error', { message: error.message });
+  }
+}
+
+/**
+ * Exportar PNG en tamaño personalizado
+ * @param {string} size - 'large' o 'original'
+ * @param {string} filename - Nombre del archivo
+ */
+exportPNGCustomSize(size, filename) {
+  const media = this.state.get('media.file');
+  const config = this.state.get('config');
+  
+  if (!media) return;
+  
+  // Determinar dimensiones objetivo
+  let targetWidth, targetHeight;
+  
+  if (size === 'original') {
+    // Tamaño original del media
+    targetWidth = media.width;
+    targetHeight = media.height;
+  } else if (size === 'large') {
+    // 1024px en el lado más largo
+    const maxDim = 1024;
+    if (media.width > media.height) {
+      targetWidth = maxDim;
+      targetHeight = Math.floor(media.height * (maxDim / media.width));
+    } else {
+      targetHeight = maxDim;
+      targetWidth = Math.floor(media.width * (maxDim / media.height));
     }
   }
+  
+  // Crear buffer temporal del tamaño objetivo
+  const tempBuffer = this.p5Instance.createGraphics(targetWidth, targetHeight);
+  tempBuffer.pixelDensity(1);
+  
+  // Aplicar el efecto de dithering en el buffer
+  this.renderToBuffer(tempBuffer, media, targetWidth, targetHeight, config);
+  
+  // Guardar el buffer
+  this.p5Instance.saveCanvas(tempBuffer.canvas, filename, 'png');
+  
+  // Limpiar
+  tempBuffer.remove();
+}
+
+/**
+ * Renderizar con efecto de dithering a un buffer
+ * @param {p5.Graphics} buffer - Buffer destino
+ * @param {p5.Image|p5.MediaElement} source - Fuente
+ * @param {number} width - Ancho
+ * @param {number} height - Alto
+ * @param {object} config - Configuración
+ */
+renderToBuffer(buffer, source, width, height, config) {
+  const scale = config.ditherScale;
+  const pw = Math.floor(width / scale);
+  const ph = Math.floor(height / scale);
+  
+  const workBuffer = this.p5Instance.createGraphics(pw, ph);
+  workBuffer.pixelDensity(1);
+  
+  // Aplicar el efecto usando las funciones legacy
+  if (config.effect === 'none') {
+    // Sin efecto, solo copiar
+    workBuffer.image(source, 0, 0, pw, ph);
+    workBuffer.loadPixels();
+    if (typeof applyImageAdjustments === 'function') {
+      applyImageAdjustments(workBuffer.pixels, config);
+    }
+    workBuffer.updatePixels();
+  } else if (config.effect === 'posterize' && typeof drawPosterize === 'function') {
+    // Crear LUT si es necesario
+    const p = this.p5Instance;
+    const colorCache = new ColorCache(p);
+    const lumaLUT = new LumaLUT();
+    const p5colors = colorCache.getColors(config.colors);
+    lumaLUT.build(p5colors, p);
+    
+    drawPosterize(p, workBuffer, source, width, height, config, lumaLUT);
+  } else if (config.effect === 'blue-noise' && typeof drawBlueNoise === 'function') {
+    const p = this.p5Instance;
+    const colorCache = new ColorCache(p);
+    const lumaLUT = new LumaLUT();
+    const blueNoiseLUT = new BlueNoiseLUT();
+    const p5colors = colorCache.getColors(config.colors);
+    lumaLUT.build(p5colors, p);
+    
+    drawBlueNoise(p, workBuffer, source, width, height, config, lumaLUT, blueNoiseLUT);
+  } else if (config.effect === 'variable-error' && typeof drawVariableError === 'function') {
+    const p = this.p5Instance;
+    const colorCache = new ColorCache(p);
+    const lumaLUT = new LumaLUT();
+    const p5colors = colorCache.getColors(config.colors);
+    lumaLUT.build(p5colors, p);
+    
+    drawVariableError(p, workBuffer, source, width, height, config, lumaLUT);
+  } else if (typeof drawDither === 'function') {
+    const p = this.p5Instance;
+    const colorCache = new ColorCache(p);
+    const lumaLUT = new LumaLUT();
+    const bayerLUT = new BayerLUT();
+    const p5colors = colorCache.getColors(config.colors);
+    lumaLUT.build(p5colors, p);
+    
+    drawDither(p, workBuffer, source, width, height, config, lumaLUT, bayerLUT);
+  }
+  
+  // Escalar al buffer final
+  buffer.image(workBuffer, 0, 0, width, height);
+  
+  // Limpiar
+  workBuffer.remove();
+}
   
   // ============================================================================
   // EXPORTACIÓN PNG SEQUENCE
