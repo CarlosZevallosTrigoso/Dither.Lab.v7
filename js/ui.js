@@ -184,8 +184,8 @@ class UIManager {
     this.elements.ditherControls.classList.toggle("hidden", !isDithering);
     
     if (isDithering) {
-      const isErrorDiffusion = !!KERNELS[effect] || effect === 'variable-error';
-      const isOrdered = effect === "bayer" || effect === "blue-noise";
+      const isErrorDiffusion = !!KERNELS[effect] || effect === 'variable-error' || effect === 'riemersma';
+      const isOrdered = effect === "bayer" || effect === "blue-noise" || effect === "threshold" || effect === "random" || effect === "halftone" || effect === "crosshatch";
       this.elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
       this.elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
     }

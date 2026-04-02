@@ -195,14 +195,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const ph = Math.floor(p.height / cfg.ditherScale);
         const buffer = bufferPool.get(pw, ph, p);
         
-        if (cfg.effect === 'posterize') {
-          drawPosterize(p, buffer, media, p.width, p.height, cfg, lumaLUT);
-        } else if (cfg.effect === 'blue-noise') {
-          drawBlueNoise(p, buffer, media, p.width, p.height, cfg, lumaLUT, blueNoiseLUT);
-        } else if (cfg.effect === 'variable-error') {
-          drawVariableError(p, buffer, media, p.width, p.height, cfg, lumaLUT);
-        } else {
-          drawDither(p, buffer, media, p.width, p.height, cfg, lumaLUT, bayerLUT);
+        switch (cfg.effect) {
+          case 'posterize':
+            drawPosterize(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'blue-noise':
+            drawBlueNoise(p, buffer, media, p.width, p.height, cfg, lumaLUT, blueNoiseLUT); break;
+          case 'variable-error':
+            drawVariableError(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'threshold':
+            drawThreshold(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'random':
+            drawRandom(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'riemersma':
+            drawRiemersma(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'halftone':
+            drawHalftone(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          case 'crosshatch':
+            drawCrosshatch(p, buffer, media, p.width, p.height, cfg, lumaLUT); break;
+          default:
+            drawDither(p, buffer, media, p.width, p.height, cfg, lumaLUT, bayerLUT); break;
         }
         
         p.image(buffer, 0, 0, p.width, p.height);
@@ -406,6 +417,14 @@ document.addEventListener('DOMContentLoaded', () => {
       bus.on('media:next-frame', () => {
         bus.emit('media:step-frames', { frames: 1 });
       });
+      
+      // ---- LAB mode toggle (direct DOM binding) ----
+      const labToggle = document.getElementById('labModeToggle');
+      if (labToggle) {
+        labToggle.addEventListener('change', (e) => {
+          appState.set('config.labMode', e.target.checked);
+        });
+      }
     }
     
     // ====================================================================
