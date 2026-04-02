@@ -1,9 +1,8 @@
 // ============================================================================
-// ALGORITHM FUNCTIONS - Legacy
+// ALGORITHM FUNCTIONS
 // ============================================================================
-// NOTA: En v7, los algoritmos se registran en AlgorithmRegistry.
-// Este archivo se mantiene por compatibilidad durante la migración.
-// Los algoritmos serán convertidos a clases en futuras actualizaciones.
+// Funciones de procesamiento de dithering.
+// Usadas directamente por el sketch p5 en app.js.
 
 // ============================================================================
 // CLASES AUXILIARES PARA OPTIMIZACIÓN
@@ -12,7 +11,7 @@
 class BufferPool {
   constructor() {
     this.buffers = new Map();
-    this.lastUsed = new Map(); // OPTIMIZACIÓN: Tracking para cleanup
+    this.lastUsed = new Map();
   }
   
   get(width, height, p) {
@@ -23,19 +22,15 @@ class BufferPool {
       const buffer = p.createGraphics(width, height);
       buffer.elt.getContext('2d', { 
         willReadFrequently: true,
-        alpha: false // OPTIMIZACIÓN: Sin alpha si no se usa transparencia
+        alpha: false
       });
       buffer.pixelDensity(1);
-      
-      // ✨ FIX PARA ESCALA: Renderizado pixelado sin blur en buffers
       buffer.elt.style.imageRendering = 'pixelated';
-      
       this.buffers.set(key, buffer);
     }
     return this.buffers.get(key);
   }
   
-  // OPTIMIZACIÓN: Limpiar buffers viejos
   cleanup(maxAge = 60000) {
     const now = Date.now();
     for (const [key, time] of this.lastUsed) {
@@ -126,14 +121,12 @@ class BayerLUT {
   }
   
   get(x, y) {
-    const index = (y % 4) * 4 + (x % 4);
-    return this.matrix[index];
+    return this.matrix[(y % 4) * 4 + (x % 4)];
   }
 }
 
 class BlueNoiseLUT {
   constructor() {
-    // Pre-calculado usando void-and-cluster (8x8)
     this.noise = new Float32Array([
       0.53, 0.18, 0.71, 0.41, 0.94, 0.24, 0.82, 0.47,
       0.12, 0.65, 0.29, 0.88, 0.06, 0.59, 0.35, 0.76,
@@ -147,29 +140,25 @@ class BlueNoiseLUT {
   }
   
   get(x, y) {
-    const index = (y % 8) * 8 + (x % 8);
-    return this.noise[index] - 0.5;
+    return this.noise[(y % 8) * 8 + (x % 8)] - 0.5;
   }
 }
 
 // ============================================================================
-// FUNCIÓN PARA AJUSTES DE IMAGEN (MODIFICADA CON SOPORTE PARA CURVAS)
+// AJUSTES DE IMAGEN (brillo, contraste, saturación, curvas)
 // ============================================================================
 function applyImageAdjustments(pixels, config) {
     const brightness = config.brightness;
     const contrast = config.contrast;
     const saturation = config.saturation;
-    const curvesLUTs = config.curvesLUTs; // NUEVO: Soporte para curvas
+    const curvesLUTs = config.curvesLUTs;
 
-    // No hacer nada si los valores son los por defecto y no hay curvas
     const hasBasicAdjustments = brightness !== 0 || contrast !== 1.0 || saturation !== 1.0;
     const hasCurves = curvesLUTs && (
       curvesLUTs.rgb || curvesLUTs.r || curvesLUTs.g || curvesLUTs.b
     );
     
-    if (!hasBasicAdjustments && !hasCurves) {
-        return;
-    }
+    if (!hasBasicAdjustments && !hasCurves) return;
 
     const len = pixels.length;
     for (let i = 0; i < len; i += 4) {
@@ -177,13 +166,11 @@ function applyImageAdjustments(pixels, config) {
         let g = pixels[i + 1];
         let b = pixels[i + 2];
 
-        // 1. Contraste y Brillo (solo si hay ajustes básicos)
         if (hasBasicAdjustments) {
           r = (r - 127.5) * contrast + 127.5 + brightness;
           g = (g - 127.5) * contrast + 127.5 + brightness;
           b = (b - 127.5) * contrast + 127.5 + brightness;
 
-          // 2. Saturación
           if (saturation !== 1.0) {
               const luma = r * 0.299 + g * 0.587 + b * 0.114;
               r = luma + (r - luma) * saturation;
@@ -192,27 +179,21 @@ function applyImageAdjustments(pixels, config) {
           }
         }
         
-        // Clamp antes de curvas
         r = Math.max(0, Math.min(255, r));
         g = Math.max(0, Math.min(255, g));
         b = Math.max(0, Math.min(255, b));
         
-        // 3. APLICAR CURVAS (NUEVO)
         if (hasCurves) {
-          // Primero aplicar curva RGB (master)
           if (curvesLUTs.rgb) {
             r = curvesLUTs.rgb[Math.round(r)];
             g = curvesLUTs.rgb[Math.round(g)];
             b = curvesLUTs.rgb[Math.round(b)];
           }
-          
-          // Luego curvas individuales por canal
           if (curvesLUTs.r) r = curvesLUTs.r[Math.round(r)];
           if (curvesLUTs.g) g = curvesLUTs.g[Math.round(g)];
           if (curvesLUTs.b) b = curvesLUTs.b[Math.round(b)];
         }
         
-        // Asegurarse de que los valores permanezcan en el rango 0-255
         pixels[i] = Math.max(0, Math.min(255, r));
         pixels[i + 1] = Math.max(0, Math.min(255, g));
         pixels[i + 2] = Math.max(0, Math.min(255, b));
@@ -231,15 +212,15 @@ function drawPosterize(p, buffer, src, w, h, cfg, lumaLUT) {
   buffer.image(src, 0, 0, pw, ph);
   buffer.loadPixels();
   
-  // OPTIMIZACIÓN FASE 1: Operar directamente sobre buffer.pixels sin clonar
   const pixels = buffer.pixels;
   applyImageAdjustments(pixels, cfg);
   
   const len = pixels.length;
 
   if (cfg.useOriginalColor) {
-    const levels = 4;
-    const step = 255 / (levels - 1);
+    // FIX: Usar cfg.colorCount en lugar de hardcoded 4
+    const levels = cfg.colorCount;
+    const step = 255 / (levels > 1 ? levels - 1 : 1);
     for (let i = 0; i < len; i += 4) {
       pixels[i] = Math.round(pixels[i] / step) * step;
       pixels[i + 1] = Math.round(pixels[i + 1] / step) * step;
@@ -266,13 +247,13 @@ function drawDither(p, buffer, src, w, h, cfg, lumaLUT, bayerLUT) {
   buffer.image(src, 0, 0, pw, ph);
   buffer.loadPixels();
   
-  // OPTIMIZACIÓN FASE 1: Operar directamente sobre buffer.pixels sin clonar
   const pix = buffer.pixels;
   applyImageAdjustments(pix, cfg);
 
   if (cfg.useOriginalColor) {
-    const levels = 4;
-    const step = 255 / (levels - 1);
+    // FIX: Usar cfg.colorCount en lugar de hardcoded 4
+    const levels = cfg.colorCount;
+    const step = 255 / (levels > 1 ? levels - 1 : 1);
     const kernel = KERNELS[cfg.effect];
     if (!kernel && cfg.effect !== 'bayer') return;
 
@@ -397,7 +378,6 @@ function drawBlueNoise(p, buffer, src, w, h, cfg, lumaLUT, blueNoiseLUT) {
   buffer.image(src, 0, 0, pw, ph);
   buffer.loadPixels();
   
-  // OPTIMIZACIÓN FASE 1: Operar directamente sobre buffer.pixels sin clonar
   const pix = buffer.pixels;
   applyImageAdjustments(pix, cfg);
 
@@ -429,13 +409,12 @@ function drawVariableError(p, buffer, src, w, h, cfg, lumaLUT) {
   buffer.image(src, 0, 0, pw, ph);
   buffer.loadPixels();
   
-  // OPTIMIZACIÓN FASE 1: Operar directamente sobre buffer.pixels sin clonar
   const pix = buffer.pixels;
   applyImageAdjustments(pix, cfg);
 
   const kernel = KERNELS['floyd-steinberg'];
   
-  // Calcular gradientes para detectar bordes
+  // Gradientes para detección de bordes
   const gradients = new Float32Array(pw * ph);
   for (let y = 1; y < ph - 1; y++) {
     for (let x = 1; x < pw - 1; x++) {

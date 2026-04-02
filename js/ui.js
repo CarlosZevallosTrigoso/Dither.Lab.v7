@@ -1,4 +1,19 @@
-// Utilidades
+// ============================================================================
+// UI UTILITIES + LEGACY UI MANAGER
+// ============================================================================
+// Contiene:
+//   - Funciones de utilidad globales (showToast, formatTime, debounce, throttle)
+//   - UIManager: gestión de color pickers y visibilidad de paneles
+//   - CurvesEditor: editor visual de curvas de color
+//
+// Los eventos DOM son manejados por UIController (js/ui/UIController.js).
+// Este archivo NO registra event listeners en el DOM ni en el EventBus.
+// ============================================================================
+
+// ============================================================================
+// UTILIDADES GLOBALES
+// ============================================================================
+
 const $ = id => document.getElementById(id);
 
 function showToast(message, duration = 3000) {
@@ -27,7 +42,6 @@ function debounce(func, wait) {
   };
 }
 
-// OPTIMIZACIÓN FASE 2: Función throttle para feedback inmediato en sliders
 function throttle(func, limit) {
   let inThrottle;
   let lastResult;
@@ -41,42 +55,25 @@ function throttle(func, limit) {
   };
 }
 
-// ========== INTEGRACIÓN CON UICONTROLLER V7 ==========
-// Si UIController está disponible, delegar funcionalidad
-if (typeof window !== 'undefined' && window.UIController) {
-  console.log('✓ UIController detectado - funcionalidad delegada');
-  
-  // Conectar eventos del UIController con el código legacy
-  if (window.eventBus) {
-    // Escuchar eventos de archivo
-    window.eventBus.on('media:file-dropped', (data) => {
-      if (typeof handleFile === 'function') {
-        handleFile(data.file);
-      }
-    });
-    
-    window.eventBus.on('media:file-selected', (data) => {
-      if (typeof handleFile === 'function') {
-        handleFile(data.file);
-      }
-    });
-  }
-}
-// ====================================================
+// ============================================================================
+// UI MANAGER — Gestión de color pickers y paneles
+// ============================================================================
+// Solo se ocupa de:
+//   - Cachear referencias DOM
+//   - Actualizar color pickers
+//   - Mostrar/ocultar paneles según el algoritmo activo
+//   - Toggle de controles de paleta
+// NO registra event listeners.
 
-// OPTIMIZACIÓN FASE 1: Variable global para controlar redibujado
-let triggerRedraw = null;
-
-// Gestión de UI
 class UIManager {
   constructor() {
     this.elements = {};
-    this.lastColorCount = 0; // OPTIMIZACIÓN FASE 2: Cache para evitar recrear DOM
+    this.lastColorCount = 0;
   }
   
   init() {
-    // Obtener todos los elementos
-    const ids = ['dropZone', 'fileInput', 'playBtn', 'restartBtn', 'effectSelect',
+    const ids = [
+      'dropZone', 'fileInput', 'playBtn', 'restartBtn', 'effectSelect',
       'monochromeToggle', 'colorCountSlider', 'colorCountVal', 'colorPickerContainer',
       'ditherControls', 'ditherScale', 'ditherScaleVal', 'serpentineToggle',
       'diffusionStrengthSlider', 'diffusionStrengthVal', 'patternStrengthSlider',
@@ -102,11 +99,9 @@ class UIManager {
     ids.forEach(id => this.elements[id] = $(id));
   }
   
-  // ===================== INICIO DE LA CORRECCIÓN =====================
-  // Esta función ha sido refactorizada para usar la API del gestor de estado v7
   updateColorPickers(appState, colorCache, lumaLUT, p, forceGradient = false) {
     const cfg = appState.get('config');
-    if (!cfg) return; // Guarda de seguridad por si el estado no está listo
+    if (!cfg) return;
 
     const previousColors = [...cfg.colors];
     const newColors = [];
@@ -128,11 +123,9 @@ class UIManager {
       newColors.push(...previousColors);
     }
 
-    appState.set('config.colors', newColors.slice(0, cfg.colorCount));
+    appState.set('config.colors', newColors.slice(0, cfg.colorCount), true);
     
-    // Volver a obtener la configuración por si cambió `colors`
     const updatedCfg = appState.get('config');
-    
     const container = this.elements.colorPickerContainer;
     const currentInputs = container.querySelectorAll('input[type="color"]');
     
@@ -158,8 +151,7 @@ class UIManager {
             appState.set('config.colors', colors);
             const p5colors = colorCache.getColors(colors);
             lumaLUT.build(p5colors, p);
-            
-            if (triggerRedraw) triggerRedraw();
+            if (window.triggerRedraw) window.triggerRedraw();
           }
         });
         container.appendChild(label);
@@ -176,10 +168,8 @@ class UIManager {
     
     const p5colors = colorCache.getColors(updatedCfg.colors);
     lumaLUT.build(p5colors, p);
-    
     this.togglePaletteControls(updatedCfg.useOriginalColor);
   }
-  // ====================== FIN DE LA CORRECCIÓN =======================
   
   togglePaletteControls(isDisabled) {
     this.elements.monochromeToggle.disabled = isDisabled;
@@ -194,7 +184,7 @@ class UIManager {
     this.elements.ditherControls.classList.toggle("hidden", !isDithering);
     
     if (isDithering) {
-      const isErrorDiffusion = !!KERNELS[effect] || effect === 'riemersma' || effect === 'variable-error';
+      const isErrorDiffusion = !!KERNELS[effect] || effect === 'variable-error';
       const isOrdered = effect === "bayer" || effect === "blue-noise";
       this.elements.errorDiffusionControls.classList.toggle("hidden", !isErrorDiffusion);
       this.elements.orderedDitherControls.classList.toggle("hidden", !isOrdered);
@@ -215,7 +205,6 @@ class CurvesEditor {
     this.width = width;
     this.height = height;
     
-    // Curvas para cada canal: array de puntos {x, y} donde x,y ∈ [0, 255]
     this.curves = {
       rgb: [{x: 0, y: 0}, {x: 255, y: 255}],
       r: [{x: 0, y: 0}, {x: 255, y: 255}],
@@ -241,20 +230,13 @@ class CurvesEditor {
   }
   
   canvasToValue(canvasCoord, isX) {
-    if (isX) {
-      return Math.round((canvasCoord / this.width) * 255);
-    } else {
-      // Y está invertido (0 arriba = 255, abajo = 0)
-      return Math.round(((this.height - canvasCoord) / this.height) * 255);
-    }
+    if (isX) return Math.round((canvasCoord / this.width) * 255);
+    return Math.round(((this.height - canvasCoord) / this.height) * 255);
   }
   
   valueToCanvas(value, isX) {
-    if (isX) {
-      return (value / 255) * this.width;
-    } else {
-      return this.height - (value / 255) * this.height;
-    }
+    if (isX) return (value / 255) * this.width;
+    return this.height - (value / 255) * this.height;
   }
   
   onMouseDown(e) {
@@ -262,7 +244,6 @@ class CurvesEditor {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Buscar punto cercano
     const points = this.curves[this.currentChannel];
     for (let i = 0; i < points.length; i++) {
       const px = this.valueToCanvas(points[i].x, true);
@@ -277,11 +258,9 @@ class CurvesEditor {
       }
     }
     
-    // Si no hay punto cercano, crear uno nuevo
     const valueX = this.canvasToValue(x, true);
     const valueY = this.canvasToValue(y, false);
     
-    // No permitir agregar en los extremos
     if (valueX > 0 && valueX < 255) {
       this.addPoint(this.currentChannel, valueX, valueY);
       this.selectedPoint = points.findIndex(p => p.x === valueX);
@@ -297,21 +276,15 @@ class CurvesEditor {
     const valueX = this.canvasToValue(x, true);
     const valueY = this.canvasToValue(y, false);
     
-    // Actualizar info
     const info = document.getElementById('curvePointInfo');
-    if (info) {
-      info.textContent = `In: ${valueX} → Out: ${valueY}`;
-    }
+    if (info) info.textContent = `In: ${valueX} → Out: ${valueY}`;
     
     if (this.isDragging && this.selectedPoint !== null) {
       const points = this.curves[this.currentChannel];
       
-      // No permitir mover los puntos extremos en X
       if (this.selectedPoint === 0 || this.selectedPoint === points.length - 1) {
-        // Solo permitir mover en Y
         points[this.selectedPoint].y = Math.max(0, Math.min(255, valueY));
       } else {
-        // Mover libremente pero limitar X entre puntos adyacentes
         const prevX = points[this.selectedPoint - 1].x;
         const nextX = points[this.selectedPoint + 1].x;
         points[this.selectedPoint].x = Math.max(prevX + 1, Math.min(nextX - 1, valueX));
@@ -319,21 +292,15 @@ class CurvesEditor {
       }
       
       this.render();
-      
-      // Trigger redraw si está disponible
       if (window.triggerRedraw) window.triggerRedraw();
     }
   }
   
-  onMouseUp(e) {
-    this.isDragging = false;
-  }
+  onMouseUp() { this.isDragging = false; }
   
-  onDoubleClick(e) {
+  onDoubleClick() {
     if (this.selectedPoint !== null) {
       const points = this.curves[this.currentChannel];
-      
-      // No permitir eliminar puntos extremos
       if (this.selectedPoint !== 0 && this.selectedPoint !== points.length - 1) {
         points.splice(this.selectedPoint, 1);
         this.selectedPoint = null;
@@ -376,66 +343,41 @@ class CurvesEditor {
     const w = this.width;
     const h = this.height;
     
-    // Limpiar
     ctx.fillStyle = '#111827';
     ctx.fillRect(0, 0, w, h);
     
     // Grid
     ctx.strokeStyle = '#374151';
     ctx.lineWidth = 1;
-    
-    // Líneas verticales y horizontales cada 25%
     for (let i = 0; i <= 4; i++) {
       const pos = (i / 4) * w;
-      ctx.beginPath();
-      ctx.moveTo(pos, 0);
-      ctx.lineTo(pos, h);
-      ctx.stroke();
-      
-      ctx.beginPath();
-      ctx.moveTo(0, pos);
-      ctx.lineTo(w, pos);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pos, 0); ctx.lineTo(pos, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, pos); ctx.lineTo(w, pos); ctx.stroke();
     }
     
-    // Diagonal de referencia (línea recta sin modificar)
+    // Diagonal de referencia
     ctx.strokeStyle = '#4b5563';
-    ctx.lineWidth = 1;
     ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(0, h);
-    ctx.lineTo(w, 0);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
     ctx.setLineDash([]);
     
-    // Dibujar curva
-    const points = this.curves[this.currentChannel];
-    const channelColors = {
-      rgb: '#06b6d4',
-      r: '#ef4444',
-      g: '#10b981',
-      b: '#3b82f6'
-    };
-    
+    // Curva
+    const channelColors = { rgb: '#06b6d4', r: '#ef4444', g: '#10b981', b: '#3b82f6' };
     ctx.strokeStyle = channelColors[this.currentChannel];
     ctx.lineWidth = 2;
     ctx.beginPath();
     
-    // Interpolar curva usando spline cúbico
     const lut = this.getLUT(this.currentChannel);
     for (let x = 0; x <= 255; x++) {
       const canvasX = this.valueToCanvas(x, true);
       const canvasY = this.valueToCanvas(lut[x], false);
-      
-      if (x === 0) {
-        ctx.moveTo(canvasX, canvasY);
-      } else {
-        ctx.lineTo(canvasX, canvasY);
-      }
+      if (x === 0) ctx.moveTo(canvasX, canvasY);
+      else ctx.lineTo(canvasX, canvasY);
     }
     ctx.stroke();
     
-    // Dibujar puntos de control
+    // Puntos de control
+    const points = this.curves[this.currentChannel];
     points.forEach((point, index) => {
       const px = this.valueToCanvas(point.x, true);
       const py = this.valueToCanvas(point.y, false);
@@ -443,7 +385,6 @@ class CurvesEditor {
       ctx.fillStyle = index === this.selectedPoint ? '#f59e0b' : '#06b6d4';
       ctx.strokeStyle = 'white';
       ctx.lineWidth = 2;
-      
       ctx.beginPath();
       ctx.arc(px, py, this.pointRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -451,12 +392,10 @@ class CurvesEditor {
     });
   }
   
-  // Generar LUT (Look-Up Table) de 256 valores usando interpolación spline
   getLUT(channel) {
     const points = this.curves[channel];
     const lut = new Uint8Array(256);
     
-    // Interpolación lineal simple entre puntos
     for (let i = 0; i < points.length - 1; i++) {
       const p1 = points[i];
       const p2 = points[i + 1];
@@ -471,7 +410,6 @@ class CurvesEditor {
     return lut;
   }
   
-  // Obtener todas las LUTs para aplicar
   getAllLUTs() {
     return {
       rgb: this.getLUT('rgb'),
@@ -482,7 +420,9 @@ class CurvesEditor {
   }
 }
 
-// OPTIMIZACIÓN FASE 1: Exportar para uso global
+// ============================================================================
+// EXPORTS GLOBALES
+// ============================================================================
 if (typeof window !== 'undefined') {
   window.UIHelpers = { throttle, debounce, showToast, formatTime };
   window.CurvesEditor = CurvesEditor;

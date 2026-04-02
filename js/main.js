@@ -1,108 +1,95 @@
 // ============================================================================
-// MAIN ENTRY POINT - v7 Architecture
+// MAIN ENTRY POINT - DitherLab v8 Architecture
 // ============================================================================
-// Inicializa los módulos v7 de forma coordinada
+// Inicializa todos los módulos de forma coordinada.
+// Este es el ÚNICO punto de inicialización.
 
 (function() {
   'use strict';
   
-  console.log('🚀 Inicializando DitherLab v7...');
+  console.log('🚀 Inicializando DitherLab v8...');
   
-  // Verificar que las dependencias estén cargadas
-  if (typeof EventBus === 'undefined') {
-    console.error('❌ EventBus no está cargado');
+  // ========================================================================
+  // Verificar dependencias
+  // ========================================================================
+  if (typeof EventBus === 'undefined' || typeof State === 'undefined') {
+    console.error('❌ Core modules no cargados (EventBus/State)');
     return;
   }
   
-  if (typeof State === 'undefined') {
-    console.error('❌ State no está cargado');
-    return;
-  }
-  
-  // ============================================================================
-  // INICIALIZACIÓN DE CORE
-  // ============================================================================
-  
-  // Crear instancia de EventBus (ya existe como singleton)
-  const eventBus = window.eventBus;
-  
-  // Crear instancia de State
+  // ========================================================================
+  // Core: EventBus + State
+  // ========================================================================
+  const eventBus = window.eventBus; // Singleton creado en EventBus.js
   const state = new State(eventBus);
-  window.state = state; // Hacer global para acceso desde legacy code
+  window.state = state;
   
-  console.log('  ✓ Core inicializado (EventBus + State)');
+  console.log('  ✓ Core (EventBus + State)');
   
-  // ============================================================================
-  // INICIALIZACIÓN DE MANAGERS
-  // ============================================================================
-  
-  // MediaManager (si está disponible)
+  // ========================================================================
+  // MediaManager
+  // ========================================================================
   if (typeof MediaManager !== 'undefined') {
-    const mediaManager = new MediaManager(state, eventBus);
-    window.mediaManager = mediaManager;
-    console.log('  ✓ MediaManager inicializado');
-  } else {
-    console.warn('  ⚠️ MediaManager no disponible');
+    window.mediaManager = new MediaManager(state, eventBus);
+    console.log('  ✓ MediaManager');
   }
   
-  // ExportManager (si está disponible)
+  // ========================================================================
+  // ExportManager
+  // ========================================================================
   if (typeof ExportManager !== 'undefined') {
-    const exportManager = new ExportManager(state, eventBus);
-    window.exportManager = exportManager;
-    console.log('  ✓ ExportManager inicializado');
-  } else {
-    console.warn('  ⚠️ ExportManager no disponible');
+    window.exportManager = new ExportManager(state, eventBus);
+    console.log('  ✓ ExportManager');
   }
   
-  // UIController (si está disponible)
+  // ========================================================================
+  // TimelineManager
+  // ========================================================================
+  if (typeof TimelineManager !== 'undefined') {
+    window.timelineManager = new TimelineManager(state, eventBus);
+    // .init() será llamado por app.js cuando se cargue un video
+    console.log('  ✓ TimelineManager');
+  }
+  
+  // ========================================================================
+  // UIController — maneja TODOS los eventos DOM
+  // ========================================================================
   if (typeof UIController !== 'undefined') {
     const uiController = new UIController(state, eventBus);
     window.uiController = uiController;
     
-    // Inicializar UI cuando el DOM esté listo
+    const initUI = () => uiController.init();
+    
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => {
-        uiController.init();
-      });
+      document.addEventListener('DOMContentLoaded', initUI);
     } else {
-      uiController.init();
+      initUI();
     }
     
-    console.log('  ✓ UIController inicializado');
-  } else {
-    console.warn('  ⚠️ UIController no disponible');
+    console.log('  ✓ UIController');
   }
   
-  // AlgorithmRegistry (si está disponible)
+  // ========================================================================
+  // AlgorithmRegistry (estructura para futuro, no activa aún)
+  // ========================================================================
   if (typeof AlgorithmRegistry !== 'undefined') {
-    const algorithmRegistry = new AlgorithmRegistry();
-    window.algorithmRegistry = algorithmRegistry;
-    console.log('  ✓ AlgorithmRegistry inicializado');
-    
-    // TODO: Registrar algoritmos aquí cuando estén convertidos a clases
-    // algorithmRegistry.register('floyd-steinberg', FloydSteinbergAlgorithm);
-  } else {
-    console.warn('  ⚠️ AlgorithmRegistry no disponible');
+    window.algorithmRegistry = new AlgorithmRegistry();
+    console.log('  ✓ AlgorithmRegistry');
   }
   
-  // ============================================================================
-  // DEBUGGING HELPERS
-  // ============================================================================
-  
-  // Exponer helpers globales para debugging en consola
+  // ========================================================================
+  // Debugging helpers
+  // ========================================================================
   window.DitherLab = {
-    version: '7.0',
+    version: '8.0',
     state,
     eventBus,
     mediaManager: window.mediaManager,
     exportManager: window.exportManager,
+    timelineManager: window.timelineManager,
     uiController: window.uiController,
-    algorithmRegistry: window.algorithmRegistry,
     
-    // Métodos útiles
-    printState() {
-      state.print();
-    },
+    printState() { state.print(); },
     
     printEvents() {
       console.log('📡 Eventos registrados:');
@@ -124,10 +111,9 @@
     }
   };
   
-  console.log('✅ DitherLab v7 inicializado correctamente');
-  console.log('💡 Usa window.DitherLab para debugging en consola');
+  console.log('✅ DitherLab v8 inicializado');
+  console.log('💡 window.DitherLab para debugging');
   
-  // Emitir evento de inicialización completa
   eventBus.emit('app:initialized');
   
 })();
