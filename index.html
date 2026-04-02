@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>DitherLab v7.6</title>
-  <meta name="description" content="Procesador avanzado de dithering con análisis de métricas y exportación multipformato"/>
+  <title>DitherLab v8.0</title>
+  <meta name="description" content="Procesador avanzado de dithering con análisis de métricas y exportación multiformato"/>
   <meta name="theme-color" content="#06b6d4"/>
   <link rel="manifest" href="manifest.json"/>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%2306b6d4' width='100' height='100'/%3E%3Ctext x='50' y='50' font-size='60' text-anchor='middle' dy='.3em' fill='white'%3ED%3C/text%3E%3C/svg%3E">
@@ -28,7 +28,7 @@
             Atajos (?)
           </button>
         </div>
-        <div class="text-xs text-gray-500 -mt-2 mb-4">v7.6 - Enhanced Edition</div>
+        <div class="text-xs text-gray-500 -mt-2 mb-4">v8.0 — Refactored Edition</div>
         
         <div class="bg-slate-800 rounded-lg p-4">
           <h2 class="font-bold text-cyan-300 mb-3">MEDIO</h2>
@@ -147,16 +147,11 @@
           <div class="flex items-center justify-between mb-3">
             <h3 class="font-bold text-yellow-300">AJUSTES DE IMAGEN</h3>
             <div class="flex gap-2">
-              <button id="toggleCurvesBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">
-                📈 Curvas
-              </button>
-              <button id="resetImageAdjustmentsBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">
-                Resetear
-              </button>
+              <button id="toggleCurvesBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">📈 Curvas</button>
+              <button id="resetImageAdjustmentsBtn" class="text-xs bg-slate-700 px-2 py-1 rounded hover:bg-slate-600">Resetear</button>
             </div>
           </div>
           
-          <!-- Controles básicos (existentes) -->
           <div id="basicImageControls" class="space-y-3">
             <label class="block">
               <span class="text-sm">Brillo: <span id="brightnessVal">0</span></span>
@@ -172,7 +167,6 @@
             </label>
           </div>
           
-          <!-- Editor de Curvas -->
           <div id="curvesEditor" class="hidden space-y-3">
             <div class="flex gap-2 mb-2">
               <button class="curve-channel-btn flex-1 bg-slate-600 px-2 py-1 rounded text-xs hover:bg-slate-500" data-channel="rgb">RGB</button>
@@ -322,7 +316,6 @@
           <div class="pt-3 border-t border-slate-700">
             <div class="text-xs text-gray-400 mb-2">Frame Actual</div>
             
-            <!-- NUEVO: Selector de tamaño de exportación -->
             <div class="mb-3 space-y-1">
               <label class="text-xs text-gray-400">Tamaño de exportación:</label>
               <div class="flex gap-2">
@@ -412,59 +405,46 @@
   </div>
 
 <!-- ========================================
-       SCRIPTS - Orden de carga correcto
-       ======================================== -->
+     SCRIPTS — Orden de carga v8
+     ======================================== -->
   
-  <!-- 1. Constantes y datos estáticos -->
+  <!-- 1. Constantes -->
   <script src="js/constants.js"></script>
   
-  <!-- 2. Core v7 - EventBus primero, luego State -->
+  <!-- 2. Core -->
   <script src="js/core/EventBus.js"></script>
   <script src="js/core/State.js"></script>
   
-  <!-- 3. Algoritmos (legacy) -->
+  <!-- 3. Algoritmos de dithering -->
   <script src="js/algorithms.js"></script>
   
-  <!-- 4. Utilidades (legacy) -->
+  <!-- 4. Utilidades -->
   <script src="js/metrics.js"></script>
   <script src="js/export.js"></script>
   
-  <!-- 5. UI (legacy) -->
+  <!-- 5. UI (utilidades + UIManager + CurvesEditor) -->
   <script src="js/ui.js"></script>
   
-  <!-- 6. Módulos v7 - Processing -->
+  <!-- 6. Processing -->
   <script src="js/processing/AlgorithmRegistry.js"></script>
   <script src="js/processing/AlgorithmBase.js"></script>
   
-  <!-- 7. Módulos v7 - Media -->
+  <!-- 7. Managers -->
   <script src="js/media/MediaManager.js"></script>
-  
-  <!-- 8. Módulos v7 - Export -->
   <script src="js/export/ExportManager.js"></script>
-  
-  <!-- 9. Módulos v7 - UI Controller -->
   <script src="js/ui/UIController.js"></script>
   
-  <!-- ========================================
-       🆕 NUEVOS MÓDULOS DE REFACTORIZACIÓN
-       ======================================== -->
-  
-  <!-- Nuevos módulos extraídos de app.js -->
+  <!-- 8. Módulos extraídos -->
   <script src="js/palette/PaletteGenerator.js"></script>
-  <script src="js/input/KeyboardManager.js"></script>
   <script src="js/timeline/TimelineManager.js"></script>
   
-  <!-- ========================================
-       APP PRINCIPAL
-       ======================================== -->
-  
-  <!-- 10. Main app (legacy - debe cargarse antes de main.js) -->
+  <!-- 9. App (sketch p5) -->
   <script src="js/app.js"></script>
   
-  <!-- 11. PWA -->
+  <!-- 10. PWA -->
   <script src="js/pwa.js"></script>
   
-  <!-- 12. Inicialización v7 - AL FINAL -->
+  <!-- 11. Inicialización -->
   <script src="js/main.js"></script>
 
 </body>
