@@ -111,9 +111,16 @@
             <optgroup label="Dithering Ordenado">
               <option value="bayer">Bayer</option>
               <option value="blue-noise">Blue Noise</option>
+              <option value="threshold">Threshold</option>
+              <option value="random">Random</option>
             </optgroup>
             <optgroup label="Avanzado">
               <option value="variable-error">Variable Error</option>
+              <option value="riemersma">Riemersma (Hilbert)</option>
+            </optgroup>
+            <optgroup label="Artístico">
+              <option value="halftone">Halftone</option>
+              <option value="crosshatch">Crosshatch</option>
             </optgroup>
           </select>
         </div>
@@ -209,6 +216,10 @@
              <label class="block">
                <span class="text-sm">Fuerza: <span id="diffusionStrengthVal">100</span>%</span>
                <input id="diffusionStrengthSlider" type="range" min="0" max="150" value="100" class="w-full"/>
+             </label>
+             <label class="flex items-center gap-2 cursor-pointer">
+               <input id="labModeToggle" type="checkbox" class="w-4 h-4"/>
+               <span class="text-sm">Espacio LAB (perceptual)</span>
              </label>
           </div>
           <div id="orderedDitherControls" class="space-y-3 hidden pt-3 border-t border-slate-700">
